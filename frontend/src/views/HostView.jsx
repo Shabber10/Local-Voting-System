@@ -20,6 +20,8 @@ export default function HostView({
   const [questionType, setQuestionType] = useState('poll'); // 'poll' | 'message'
   const [questionInput, setQuestionInput] = useState('');
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isVoterModalOpen, setIsVoterModalOpen] = useState(false);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState('live'); // 'live' | 'history'
 
@@ -154,8 +156,9 @@ export default function HostView({
             </div>
           </div>
 
-          {/* Host Quick Actions */}
-          <div className="host-quick-actions">
+          {/* Host Actions: Row 2 (3 cols) & Row 3 (3 cols) */}
+          <div className="host-actions-grid">
+            {/* Row 2: lock room | Show QR | Voters (count) */}
             <button
               type="button"
               className={`btn btn-sm ${room.isLocked ? 'btn-danger' : 'btn-outline'}`}
@@ -169,10 +172,22 @@ export default function HostView({
               type="button"
               className="btn btn-sm btn-outline"
               onClick={() => setIsQrModalOpen(true)}
+              title="Show QR Code and Direct Join Link"
             >
               <span>📱 Show QR Code</span>
             </button>
 
+            <button
+              type="button"
+              className="btn btn-sm btn-outline btn-voters-action"
+              onClick={() => setIsVoterModalOpen(true)}
+              title="View Connected Voters Roster"
+            >
+              <span>👥 Voters</span>
+              <span className="btn-badge-counter">{totalParticipants}</span>
+            </button>
+
+            {/* Row 3: Export CSV | History (count) | Erase Data */}
             <button
               type="button"
               className="btn btn-sm btn-outline"
@@ -180,6 +195,15 @@ export default function HostView({
               title="Export complete session history to CSV"
             >
               <span>📥 Export CSV</span>
+            </button>
+
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              onClick={() => setIsHistoryModalOpen(true)}
+              title="View Completed Rounds History"
+            >
+              <span>📜 History ({questionHistory.length})</span>
             </button>
 
             <button
@@ -580,6 +604,166 @@ export default function HostView({
           <button type="button" className="btn btn-secondary btn-block" onClick={handleCopyLink}>
             <span>{copiedLink ? '✓ Link Copied!' : '🔗 Copy Direct Join Link'}</span>
           </button>
+        </div>
+      </div>
+
+      {/* Voter Roster Modal Popup */}
+      <div className={`modal-backdrop ${isVoterModalOpen ? 'open' : ''}`} id="voterRosterModalBackdrop">
+        <div className="modal-dialog glass-card" style={{ maxWidth: 520, textAlign: 'left' }}>
+          <button type="button" className="modal-close-btn" onClick={() => setIsVoterModalOpen(false)}>
+            ✕
+          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>👥 Connected Voters</span>
+                <span className="badge-count" style={{ fontSize: '0.78rem' }}>{totalParticipants} Total</span>
+              </h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Live participant roster for Room #{room.id}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-xs btn-outline"
+              onClick={handleExportCsv}
+              title="Download CSV Report"
+            >
+              📥 Export CSV
+            </button>
+          </div>
+
+          <div className="roster-list-container" style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {participants.length === 0 ? (
+              <div className="empty-roster-msg" style={{ textAlign: 'center', padding: '36px 10px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>⏳</div>
+                <p>Waiting for voters to enter Room <strong style={{ color: 'var(--accent-cyan)' }}>#{room.id}</strong>...</p>
+              </div>
+            ) : (
+              participants.map((p) => (
+                <div
+                  key={p.id}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 14px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: 'var(--radius-sm)',
+                    border: '1px solid rgba(255, 255, 255, 0.06)'
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>👤</span>
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fff' }}>{p.alias || 'Voter'}</div>
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: {p.id.slice(0, 12)}...</div>
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span className={`roster-status-badge ${p.hasVoted ? 'status-voted' : 'status-waiting'}`}>
+                      {p.hasVoted ? '✓ Voted' : 'Waiting...'}
+                    </span>
+                    {onKickParticipant && (
+                      <button
+                        type="button"
+                        onClick={() => onKickParticipant(p.id)}
+                        title="Disqualify/Remove voter"
+                        style={{
+                          background: 'rgba(239, 68, 68, 0.15)',
+                          border: '1px solid rgba(239, 68, 68, 0.35)',
+                          color: '#f87171',
+                          borderRadius: '6px',
+                          padding: '3px 8px',
+                          fontSize: '0.72rem',
+                          cursor: 'pointer',
+                          fontWeight: 700
+                        }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Completed Rounds History Modal Popup */}
+      <div className={`modal-backdrop ${isHistoryModalOpen ? 'open' : ''}`} id="historyModalBackdrop">
+        <div className="modal-dialog glass-card" style={{ maxWidth: 560, textAlign: 'left' }}>
+          <button type="button" className="modal-close-btn" onClick={() => setIsHistoryModalOpen(false)}>
+            ✕
+          </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span>📜 Completed Rounds History</span>
+                <span className="badge-count" style={{ fontSize: '0.78rem' }}>{questionHistory.length} Rounds</span>
+              </h3>
+              <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                Audit of all concluded questions and poll rounds
+              </p>
+            </div>
+            <button
+              type="button"
+              className="btn btn-xs btn-outline"
+              onClick={handleExportCsv}
+              title="Download CSV Report"
+            >
+              📥 Export CSV
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: 400, overflowY: 'auto' }}>
+            {questionHistory.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '36px 10px', color: 'var(--text-muted)' }}>
+                <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>📜</div>
+                <p>No completed rounds yet. Launch and close questions to view history here.</p>
+              </div>
+            ) : (
+              questionHistory.map((hq) => (
+                <div
+                  key={hq.id}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'rgba(255, 255, 255, 0.03)',
+                    borderRadius: 'var(--radius-md)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    gap: '12px'
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
+                      <strong style={{ color: 'var(--accent-cyan)' }}>Round #{hq.id}</strong>
+                      <span style={{
+                        fontSize: '0.7rem',
+                        padding: '2px 8px',
+                        borderRadius: '10px',
+                        background: 'rgba(255, 255, 255, 0.08)',
+                        color: 'var(--text-muted)',
+                        textTransform: 'uppercase',
+                        fontWeight: 700
+                      }}>
+                        {hq.mode}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: '0.92rem', color: '#fff', wordBreak: 'break-word', fontWeight: 600 }}>
+                      {hq.text}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: '0.88rem', color: 'var(--accent-emerald)', fontWeight: 800, whiteSpace: 'nowrap' }}>
+                    {hq.totalVotes} votes
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </>

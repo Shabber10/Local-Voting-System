@@ -4,11 +4,10 @@
    ===================================================================== */
 
 .host-topbar {
-  padding: 16px 22px;
+  padding: 16px 20px;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 18px;
+  flex-direction: column;
+  gap: 12px;
   margin-bottom: 22px;
   background: var(--bg-card);
   backdrop-filter: blur(20px);
@@ -24,8 +23,8 @@
 .room-credentials-panel {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
-  flex: 1;
+  gap: 12px;
+  width: 100%;
 }
 
 /* Tactile Clay Credential Boxes */
@@ -167,19 +166,49 @@
   text-shadow: 0 0 8px rgba(255, 255, 255, 0.6);
 }
 
-.host-quick-actions {
-  display: flex;
-  align-items: center;
+.host-actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
   gap: 10px;
-  flex-shrink: 0;
+  width: 100%;
 }
 
-.host-quick-actions .btn {
-  height: 46px;
-  padding: 0 18px;
-  font-size: 0.86rem;
+.host-actions-grid .btn {
+  height: 44px;
+  padding: 0 10px;
+  font-size: 0.84rem;
   font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  position: relative;
   white-space: nowrap;
+}
+
+.btn-voters-action {
+  position: relative;
+  overflow: visible !important;
+}
+
+.btn-badge-counter {
+  position: absolute;
+  top: -7px;
+  right: -6px;
+  background: linear-gradient(135deg, #06b6d4 0%, #0284c7 100%);
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 3px 7px;
+  min-width: 20px;
+  text-align: center;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.75);
+  box-shadow: 0 2px 8px rgba(6, 182, 212, 0.8), 0 0 10px rgba(6, 182, 212, 0.5);
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* Host Grid Layout */
@@ -792,17 +821,17 @@
     height: 38px;
   }
 
-  .host-quick-actions {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 8px;
+  .host-actions-grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
     width: 100%;
   }
 
-  .host-quick-actions .btn {
-    padding: 0 6px;
-    font-size: 0.72rem;
+  .host-actions-grid .btn {
+    padding: 0 4px;
+    font-size: clamp(0.68rem, 2.3vw, 0.78rem);
     height: 40px;
+    gap: 4px;
   }
 
   .host-mode-toggle-bar {
