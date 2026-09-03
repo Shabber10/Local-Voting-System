@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { socket } from './services/socket';
+import { getVoterSessionId, setActiveVoterRoom, getActiveVoterRoom } from './services/session';
 import LandingView from './views/LandingView';
 import HostView from './views/HostView';
 import VoterView from './views/VoterView';
@@ -71,6 +72,7 @@ function AppContent() {
     function onRoomJoined(res) {
       setIsConnecting(false);
       if (res.success) {
+        setActiveVoterRoom(res.state.roomId);
         setVoterState({
           ...res.state,
           roomId: String(res.state.roomId),
@@ -81,6 +83,10 @@ function AppContent() {
         navigate(`/vote/${res.state.roomId}`);
       } else {
         setJoinError(res.error || 'Failed to join room');
+        if (window.location.pathname.startsWith('/vote')) {
+          setActiveVoterRoom(null);
+          navigate('/');
+        }
       }
     }
 
@@ -289,6 +295,11 @@ function AppContent() {
       }
     }
 
+    function onKicked(data) {
+      alert(data?.message || 'You have been removed from this voting session.');
+      handleVoterExit();
+    }
+
     socket.on('connect', onConnect);
     socket.on('room_created', onRoomCreated);
     socket.on('room_joined', onRoomJoined);
@@ -296,6 +307,7 @@ function AppContent() {
     socket.on('otp_rotated', onOtpRotated);
     socket.on('otp_tick', onOtpTick);
     socket.on('session_expired', onSessionExpired);
+    socket.on('kicked', onKicked);
     socket.on('tally_updated', onTallyUpdated);
     socket.on('roster_updated', onRosterUpdated);
     socket.on('vote_confirmed', onVoteConfirmed);
@@ -317,6 +329,7 @@ function AppContent() {
       socket.off('otp_rotated', onOtpRotated);
       socket.off('otp_tick', onOtpTick);
       socket.off('session_expired', onSessionExpired);
+      socket.off('kicked', onKicked);
       socket.off('tally_updated', onTallyUpdated);
       socket.off('roster_updated', onRosterUpdated);
       socket.off('vote_confirmed', onVoteConfirmed);
@@ -343,7 +356,8 @@ function AppContent() {
     setIsConnecting(true);
     setCreateError(null);
     setJoinError(null);
-    socket.emit('join_room', { roomId, passcode });
+    const voterSessionId = getVoterSessionId();
+    socket.emit('join_room', { roomId, passcode, voterSessionId });
   };
 
   const handleClearErrors = () => {
@@ -377,9 +391,11 @@ function AppContent() {
 
   const handleSubmitVote = (voteVal) => {
     if (!voterState.roomId) return;
+    const voterSessionId = getVoterSessionId();
     socket.emit('submit_vote', {
       roomId: voterState.roomId,
-      vote: voteVal
+      vote: voteVal,
+      voterSessionId
     });
   };
 
@@ -428,8 +444,10 @@ function AppContent() {
 
   const handleVoterExit = () => {
     if (voterState.roomId) {
-      socket.emit('voter_leave_room', { roomId: voterState.roomId });
+      const voterSessionId = getVoterSessionId();
+      socket.emit('voter_leave_room', { roomId: voterState.roomId, voterSessionId });
     }
+    setActiveVoterRoom(null);
     setVoterState({
       roomId: null,
       title: '',
@@ -577,12 +595,22 @@ function VoterRouteWrapper({
 
   useEffect(() => {
     if (!voterState.roomId || String(voterState.roomId) !== String(roomId)) {
-      navigate(`/?room=${roomId}`);
+      const activeRoom = getActiveVoterRoom();
+      const voterSessionId = getVoterSessionId();
+      if (activeRoom && String(activeRoom) === String(roomId) && voterSessionId) {
+        socket.emit('rejoin_room', { roomId, voterSessionId });
+      } else {
+        navigate(`/?room=${roomId}`);
+      }
     }
   }, [voterState.roomId, roomId, navigate]);
 
   if (!voterState.roomId) {
-    return null;
+    return (
+      <div style={{ textAlign: 'center', padding: '100px 20px', color: 'var(--text-secondary)' }}>
+        <h2>Connecting to voting booth...</h2>
+      </div>
+    );
   }
 
   return (

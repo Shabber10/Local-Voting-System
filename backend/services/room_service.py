@@ -115,16 +115,39 @@ class RoomService:
                 return True
             return False
 
-    def add_participant(self, room_id: str, socket_id: str, alias: str = None) -> dict:
+    def add_participant(self, room_id: str, socket_id: str, alias: str = None, session_id: str = None) -> dict:
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
             if not room:
                 raise ValueError("Room not found")
-            if room["isLocked"]:
-                raise ValueError("Room is locked by host")
             if room["status"] != "active":
                 raise ValueError("Session is no longer active")
+
+            # Fallback session_id to socket_id if not provided
+            voter_key = str(session_id).strip() if session_id and str(session_id).strip() else socket_id
+
+            if "socketToSession" not in room:
+                room["socketToSession"] = {}
+
+            # Re-attach if participant already joined from this browser session
+            if voter_key in room["participants"]:
+                participant = room["participants"][voter_key]
+                if "socketIds" not in participant or not isinstance(participant["socketIds"], set):
+                    participant["socketIds"] = {participant.get("socketId", socket_id)}
+                participant["socketIds"].add(socket_id)
+                participant["socketId"] = socket_id
+                participant["status"] = "active"
+                room["socketToSession"][socket_id] = voter_key
+                
+                # Check current question vote state
+                if room.get("currentQuestion"):
+                    participant["hasVoted"] = voter_key in room["currentQuestion"].get("votes", {})
+                return participant
+
+            # New participant joining: check locked state
+            if room["isLocked"]:
+                raise ValueError("Room is locked by host")
 
             # Assign alias if not provided
             if not alias or not alias.strip():
@@ -134,11 +157,13 @@ class RoomService:
                 alias = alias.strip()
 
             has_voted_active = False
-            if room["currentQuestion"] and socket_id in room["currentQuestion"].get("votes", {}):
+            if room["currentQuestion"] and voter_key in room["currentQuestion"].get("votes", {}):
                 has_voted_active = True
 
             participant = {
-                "id": socket_id,
+                "id": voter_key,
+                "socketId": socket_id,
+                "socketIds": {socket_id},
                 "alias": alias,
                 "joinedAt": time.time(),
                 "strikes": 0,
@@ -146,29 +171,54 @@ class RoomService:
                 "hasVoted": has_voted_active,
                 "status": "active"
             }
-            room["participants"][socket_id] = participant
+            room["participants"][voter_key] = participant
+            room["socketToSession"][socket_id] = voter_key
             return participant
 
-    def remove_participant(self, room_id: str, socket_id: str) -> dict | None:
-        """Completely removes a participant when they exit or disconnect."""
+    def remove_participant(self, room_id: str, socket_id: str, force: bool = False) -> dict | None:
+        """Removes a participant when their last socket disconnects or when explicitly kicked."""
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
             if not room:
                 return None
-            room["participants"].pop(socket_id, None)
-            if room["currentQuestion"]:
-                room["currentQuestion"].get("votes", {}).pop(socket_id, None)
-            room["votes"].pop(socket_id, None)
+
+            if "socketToSession" not in room:
+                room["socketToSession"] = {}
+
+            voter_key = room["socketToSession"].pop(socket_id, socket_id)
+            participant = room["participants"].get(voter_key)
+
+            if participant:
+                socket_ids = participant.get("socketIds", set())
+                if socket_id in socket_ids:
+                    socket_ids.remove(socket_id)
+
+                if force or not socket_ids:
+                    room["participants"].pop(voter_key, None)
+                    if room.get("currentQuestion"):
+                        room["currentQuestion"].get("votes", {}).pop(voter_key, None)
+                    room["votes"].pop(voter_key, None)
+                    
+                    # Clean up any leftover sockets mapped to this voter
+                    keys_to_del = [sid for sid, vk in room["socketToSession"].items() if vk == voter_key]
+                    for sid in keys_to_del:
+                        room["socketToSession"].pop(sid, None)
+
             return self._calculate_tally_unlocked(room)
 
-    def get_participant(self, room_id: str, socket_id: str) -> dict | None:
+    def get_participant(self, room_id: str, identifier: str) -> dict | None:
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
             if not room:
                 return None
-            return room["participants"].get(socket_id)
+            if identifier in room["participants"]:
+                return room["participants"][identifier]
+            voter_key = room.get("socketToSession", {}).get(identifier)
+            if voter_key and voter_key in room["participants"]:
+                return room["participants"][voter_key]
+            return None
 
     # -------------------------------------------------------------
     # Multi-Question / Dynamic Round Management
@@ -264,7 +314,7 @@ class RoomService:
                 p["hasVoted"] = False
             return True
 
-    def submit_vote(self, room_id: str, socket_id: str, vote_value) -> dict:
+    def submit_vote(self, room_id: str, socket_id: str, vote_value, session_id: str = None) -> dict:
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
@@ -280,7 +330,9 @@ class RoomService:
             if curr_q.get("type") == "message":
                 raise ValueError("This is an announcement message, not an active poll.")
 
-            participant = room["participants"].get(socket_id)
+            # Resolve participant by session_id or socket_id
+            voter_key = str(session_id).strip() if session_id and str(session_id).strip() else room.get("socketToSession", {}).get(socket_id, socket_id)
+            participant = room["participants"].get(voter_key)
             if not participant:
                 raise ValueError("Participant is not registered in this room")
             if participant.get("disqualified"):
@@ -304,20 +356,25 @@ class RoomService:
 
             if vote_value is None:
                 # Retract vote
-                curr_q["votes"].pop(socket_id, None)
-                room["votes"].pop(socket_id, None)
+                curr_q["votes"].pop(voter_key, None)
+                room["votes"].pop(voter_key, None)
                 participant["hasVoted"] = False
                 order_num = None
             else:
-                curr_q["voteOrder"] += 1
-                order_num = curr_q["voteOrder"]
-                curr_q["votes"][socket_id] = {
+                existing_vote = curr_q["votes"].get(voter_key)
+                if existing_vote:
+                    order_num = existing_vote.get("order", curr_q.get("voteOrder", 1))
+                else:
+                    curr_q["voteOrder"] += 1
+                    order_num = curr_q["voteOrder"]
+
+                curr_q["votes"][voter_key] = {
                     "alias": participant["alias"],
                     "vote": vote_value,
                     "order": order_num,
                     "timestamp": time.time()
                 }
-                room["votes"][socket_id] = vote_value
+                room["votes"][voter_key] = vote_value
                 participant["hasVoted"] = True
 
             tally = self._calculate_question_tally_unlocked(room, curr_q)
@@ -326,7 +383,8 @@ class RoomService:
                 "order": order_num,
                 "tally": tally,
                 "hasVoted": participant["hasVoted"],
-                "questionId": curr_q["id"]
+                "questionId": curr_q["id"],
+                "participant": participant
             }
 
     def reset_votes(self, room_id: str) -> dict:
@@ -553,19 +611,20 @@ class RoomService:
                 return None
             return self.get_host_state_unlocked(room)
 
-    def get_voter_state(self, room_id: str, socket_id: str) -> dict | None:
+    def get_voter_state(self, room_id: str, socket_id: str, session_id: str = None) -> dict | None:
         with self._lock:
             room = self._rooms.get(str(room_id).strip())
             if not room:
                 return None
-            participant = room["participants"].get(socket_id)
+            voter_key = str(session_id).strip() if session_id and str(session_id).strip() else room.get("socketToSession", {}).get(socket_id, socket_id)
+            participant = room["participants"].get(voter_key)
             
             curr_q = room.get("currentQuestion")
             user_vote = None
             has_voted = False
 
             if curr_q:
-                vote_info = curr_q.get("votes", {}).get(socket_id)
+                vote_info = curr_q.get("votes", {}).get(voter_key)
                 if vote_info:
                     user_vote = vote_info["vote"] if isinstance(vote_info, dict) else vote_info
                     has_voted = True

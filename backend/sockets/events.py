@@ -167,6 +167,7 @@ def register_socket_events(socketio):
         room_id = data.get("roomId")
         passcode = data.get("passcode")
         alias = data.get("alias")
+        session_id = data.get("voterSessionId") or data.get("sessionId")
         socket_id = request.sid
 
         room = room_service.get_room(room_id)
@@ -178,20 +179,23 @@ def register_socket_events(socketio):
             emit("room_joined", {"success": False, "error": "This voting session has ended."})
             return
 
-        if room["isLocked"]:
+        is_existing_voter = bool(session_id and (session_id in room.get("participants", {})))
+
+        if room["isLocked"] and not is_existing_voter:
             emit("room_joined", {"success": False, "error": "This room is currently locked by the host."})
             return
 
-        # Validate dynamic passcode
-        if not otp_service.validate_passcode(room, passcode):
-            emit("room_joined", {"success": False, "error": "Invalid or expired 4-digit Passcode. Please check the host screen."})
-            return
+        # Validate dynamic passcode for new joins or when passcode is provided
+        if not is_existing_voter or passcode:
+            if not otp_service.validate_passcode(room, passcode):
+                emit("room_joined", {"success": False, "error": "Invalid or expired 4-digit Passcode. Please check the host screen."})
+                return
 
         try:
-            participant = room_service.add_participant(room_id, socket_id, alias)
+            participant = room_service.add_participant(room_id, socket_id, alias, session_id=session_id)
             join_room(f"room_{room_id}")
 
-            voter_state = room_service.get_voter_state(room_id, socket_id)
+            voter_state = room_service.get_voter_state(room_id, socket_id, session_id=session_id)
             emit("room_joined", {"success": True, "state": voter_state})
 
             # Broadcast participant roster & count update
@@ -204,6 +208,29 @@ def register_socket_events(socketio):
 
         except Exception as e:
             emit("room_joined", {"success": False, "error": str(e)})
+
+    @socketio.on("rejoin_room")
+    def handle_rejoin_room(data):
+        data = data or {}
+        room_id = data.get("roomId")
+        session_id = data.get("voterSessionId") or data.get("sessionId")
+        socket_id = request.sid
+
+        room = room_service.get_room(room_id)
+        if not room or room["status"] == "ended":
+            emit("room_joined", {"success": False, "error": "Room is no longer active."})
+            return
+
+        if session_id and session_id in room.get("participants", {}):
+            try:
+                participant = room_service.add_participant(room_id, socket_id, session_id=session_id)
+                join_room(f"room_{room_id}")
+                voter_state = room_service.get_voter_state(room_id, socket_id, session_id=session_id)
+                emit("room_joined", {"success": True, "state": voter_state})
+            except Exception as e:
+                emit("room_joined", {"success": False, "error": str(e)})
+        else:
+            emit("room_joined", {"success": False, "error": "Session not found or expired."})
 
     # Dynamic Question / Round Launching
     @socketio.on("host_launch_question")
@@ -257,18 +284,22 @@ def register_socket_events(socketio):
         data = data or {}
         room_id = data.get("roomId")
         vote_value = data.get("vote")
+        session_id = data.get("voterSessionId") or data.get("sessionId")
         socket_id = request.sid
 
         try:
-            result = room_service.submit_vote(room_id, socket_id, vote_value)
+            result = room_service.submit_vote(room_id, socket_id, vote_value, session_id=session_id)
             
-            # Confirm to voter
-            emit("vote_confirmed", {
-                "success": True,
-                "vote": result["vote"],
-                "order": result.get("order"),
-                "questionId": result.get("questionId")
-            })
+            # Confirm to voter across all connected sockets/tabs for this voter
+            participant = result.get("participant", {})
+            socket_ids = participant.get("socketIds") or {socket_id}
+            for sid in socket_ids:
+                socketio.emit("vote_confirmed", {
+                    "success": True,
+                    "vote": result["vote"],
+                    "order": result.get("order"),
+                    "questionId": result.get("questionId")
+                }, to=sid)
 
             # Broadcast updated tally & participants to the entire room
             host_state = room_service.get_host_state(room_id)
@@ -379,15 +410,40 @@ def register_socket_events(socketio):
     def handle_kick_participant(data):
         data = data or {}
         room_id = data.get("roomId")
-        target_socket_id = data.get("socketId")
+        target_id = data.get("socketId")
 
         room = room_service.get_room(room_id)
         if not room:
             return
 
-        participant = room_service.get_participant(room_id, target_socket_id)
+        participant = room_service.get_participant(room_id, target_id)
         if participant:
-            new_tally = room_service.remove_participant(room_id, target_socket_id)
+            socket_ids = list(participant.get("socketIds", [participant.get("socketId")]))
+            new_tally = room_service.remove_participant(room_id, target_id, force=True)
+            
+            for sid in socket_ids:
+                if sid:
+                    socketio.emit("kicked", {"message": "You have been disqualified by the host."}, to=sid)
+
+            host_state = room_service.get_host_state(room_id)
+            if host_state:
+                socketio.emit("roster_updated", {
+                    "participants": host_state["participants"],
+                    "participantCount": host_state["participantCount"]
+                }, to=f"room_{room_id}")
+                socketio.emit("tally_updated", {
+                    "tally": new_tally,
+                    "participants": host_state["participants"],
+                    "isRevealed": host_state["isRevealed"]
+                }, to=f"room_{room_id}")
+
+    @socketio.on("voter_leave_room")
+    def handle_voter_leave_room(data):
+        data = data or {}
+        room_id = data.get("roomId")
+        socket_id = request.sid
+        if room_id:
+            new_tally = room_service.remove_participant(room_id, socket_id, force=True)
             host_state = room_service.get_host_state(room_id)
             if host_state:
                 socketio.emit("roster_updated", {
@@ -409,17 +465,20 @@ def register_socket_events(socketio):
                 # Host disconnected -> free room code immediately
                 room_service.destroy_room(room_id)
                 socketio.emit("room_closed", {"roomId": room_id}, to=f"room_{room_id}")
-            elif socket_id in room.get("participants", {}):
-                # Voter left -> completely remove from participants roster and update counts/tally
-                new_tally = room_service.remove_participant(room_id, socket_id)
-                host_state = room_service.get_host_state(room_id)
-                if host_state:
-                    socketio.emit("roster_updated", {
-                        "participants": host_state["participants"],
-                        "participantCount": host_state["participantCount"]
-                    }, to=f"room_{room_id}")
-                    socketio.emit("tally_updated", {
-                        "tally": new_tally,
-                        "participants": host_state["participants"],
-                        "isRevealed": host_state["isRevealed"]
-                    }, to=f"room_{room_id}")
+            elif socket_id in room.get("participants", {}) or socket_id in room.get("socketToSession", {}):
+                prev_count = len(room.get("participants", {}))
+                new_tally = room_service.remove_participant(room_id, socket_id, force=False)
+                new_count = len(room.get("participants", {}))
+                # Only broadcast updates if the voter was completely disconnected (last tab closed)
+                if prev_count != new_count:
+                    host_state = room_service.get_host_state(room_id)
+                    if host_state:
+                        socketio.emit("roster_updated", {
+                            "participants": host_state["participants"],
+                            "participantCount": host_state["participantCount"]
+                        }, to=f"room_{room_id}")
+                        socketio.emit("tally_updated", {
+                            "tally": new_tally,
+                            "participants": host_state["participants"],
+                            "isRevealed": host_state["isRevealed"]
+                        }, to=f"room_{room_id}")
