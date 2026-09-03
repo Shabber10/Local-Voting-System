@@ -462,9 +462,9 @@ def register_socket_events(socketio):
         for room in room_service.get_all_rooms():
             room_id = room["id"]
             if room.get("hostSocketId") == socket_id:
-                # Host disconnected -> free room code immediately
-                room_service.destroy_room(room_id)
-                socketio.emit("room_closed", {"roomId": room_id}, to=f"room_{room_id}")
+                # Host temporarily disconnected (browser reload, page refresh, or network fluctuation).
+                # DO NOT destroy the room immediately; allow host to reconnect via host_auth with hostKey.
+                pass
             elif socket_id in room.get("participants", {}) or socket_id in room.get("socketToSession", {}):
                 prev_count = len(room.get("participants", {}))
                 new_tally = room_service.remove_participant(room_id, socket_id, force=False)

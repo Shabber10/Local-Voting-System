@@ -1,7 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { socket } from './services/socket';
-import { getVoterSessionId, setActiveVoterRoom, getActiveVoterRoom } from './services/session';
+import { 
+  getVoterSessionId, 
+  setActiveVoterRoom, 
+  getActiveVoterRoom,
+  saveHostSession,
+  getHostSessionKey,
+  getCachedHostRoom,
+  clearHostSession
+} from './services/session';
 import LandingView from './views/LandingView';
 import HostView from './views/HostView';
 import VoterView from './views/VoterView';
@@ -62,7 +70,7 @@ function AppContent() {
         setHostKey(res.hostKey);
         setCreateError(null);
         setJoinError(null);
-        localStorage.setItem(`hostKey_${res.room.id}`, res.hostKey);
+        saveHostSession(res.room.id, res.hostKey, res.room);
         navigate(`/host/${res.room.id}`);
       } else {
         setCreateError(res.error || 'Failed to create room');
@@ -97,7 +105,9 @@ function AppContent() {
           id: String(res.room.id),
           sessionRemainingSeconds: res.room.sessionRemainingSeconds
         });
+        saveHostSession(res.room.id, getHostSessionKey(res.room.id), res.room);
       } else {
+        clearHostSession(res.roomId || window.location.pathname.split('/').pop());
         navigate('/');
       }
     }
@@ -436,7 +446,7 @@ function AppContent() {
   const handleHostExit = () => {
     if (hostRoom) {
       socket.emit('host_leave_room', { roomId: hostRoom.id });
-      localStorage.removeItem(`hostKey_${hostRoom.id}`);
+      clearHostSession(hostRoom.id);
     }
     setHostRoom(null);
     navigate('/');
@@ -550,16 +560,32 @@ function HostRouteWrapper({
 
   useEffect(() => {
     if (!hostRoom) {
-      const savedKey = localStorage.getItem(`hostKey_${roomId}`);
-      if (savedKey) {
-        socket.emit('host_auth', { roomId, hostKey: savedKey });
-      } else {
+      const savedKey = getHostSessionKey(roomId);
+      if (!savedKey) {
         navigate('/');
+        return;
+      }
+
+      const attemptAuth = () => {
+        socket.emit('host_auth', { roomId, hostKey: savedKey });
+      };
+
+      if (socket.connected) {
+        attemptAuth();
+      } else {
+        socket.once('connect', attemptAuth);
+        const timer = setTimeout(attemptAuth, 250);
+        return () => {
+          socket.off('connect', attemptAuth);
+          clearTimeout(timer);
+        };
       }
     }
   }, [hostRoom, roomId, navigate]);
 
-  if (!hostRoom) {
+  const effectiveRoom = hostRoom || getCachedHostRoom(roomId);
+
+  if (!effectiveRoom) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px', color: 'var(--text-secondary)' }}>
         <h2>Authenticating Host Session...</h2>
@@ -569,7 +595,7 @@ function HostRouteWrapper({
 
   return (
     <HostView
-      room={hostRoom}
+      room={effectiveRoom}
       onLaunchQuestion={onLaunchQuestion}
       onCloseQuestion={onCloseQuestion}
       onEraseSessionData={onEraseSessionData}
@@ -598,7 +624,19 @@ function VoterRouteWrapper({
       const activeRoom = getActiveVoterRoom();
       const voterSessionId = getVoterSessionId();
       if (activeRoom && String(activeRoom) === String(roomId) && voterSessionId) {
-        socket.emit('rejoin_room', { roomId, voterSessionId });
+        const attemptRejoin = () => {
+          socket.emit('rejoin_room', { roomId, voterSessionId });
+        };
+        if (socket.connected) {
+          attemptRejoin();
+        } else {
+          socket.once('connect', attemptRejoin);
+          const timer = setTimeout(attemptRejoin, 250);
+          return () => {
+            socket.off('connect', attemptRejoin);
+            clearTimeout(timer);
+          };
+        }
       } else {
         navigate(`/?room=${roomId}`);
       }
