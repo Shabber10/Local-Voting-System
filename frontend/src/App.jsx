@@ -1,0 +1,603 @@
+import React, { useState, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, useNavigate, useParams, useLocation } from 'react-router-dom';
+import { socket } from './services/socket';
+import LandingView from './views/LandingView';
+import HostView from './views/HostView';
+import VoterView from './views/VoterView';
+
+function AppContent() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [createError, setCreateError] = useState(null);
+  const [joinError, setJoinError] = useState(null);
+
+  // Host state
+  const [hostRoom, setHostRoom] = useState(null);
+  const [hostKey, setHostKey] = useState(null);
+
+  // Voter state
+  const [voterState, setVoterState] = useState({
+    roomId: null,
+    title: '',
+    mode: 'assembly',
+    isLocked: false,
+    isRevealed: true,
+    status: 'active',
+    hasVoted: false,
+    myVote: null,
+    alias: '',
+    tally: null
+  });
+
+  // URL query params
+  const [urlParams, setUrlParams] = useState({ room: '', pin: '' });
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const roomParam = params.get('room') || '';
+    const pinParam = params.get('pin') || '';
+    if (roomParam || pinParam) {
+      setUrlParams({ room: roomParam, pin: pinParam });
+    }
+  }, [location.search]);
+
+  // Socket event listeners
+  useEffect(() => {
+    function onConnect() {
+      setCreateError(null);
+      setJoinError(null);
+    }
+
+    function onRoomCreated(res) {
+      setIsConnecting(false);
+      if (res.success) {
+        setHostRoom({
+          ...res.room,
+          id: String(res.room.id),
+          sessionRemainingSeconds: res.room.sessionRemainingSeconds
+        });
+        setHostKey(res.hostKey);
+        setCreateError(null);
+        setJoinError(null);
+        localStorage.setItem(`hostKey_${res.room.id}`, res.hostKey);
+        navigate(`/host/${res.room.id}`);
+      } else {
+        setCreateError(res.error || 'Failed to create room');
+      }
+    }
+
+    function onRoomJoined(res) {
+      setIsConnecting(false);
+      if (res.success) {
+        setVoterState({
+          ...res.state,
+          roomId: String(res.state.roomId),
+          sessionRemainingSeconds: res.state.sessionRemainingSeconds
+        });
+        setCreateError(null);
+        setJoinError(null);
+        navigate(`/vote/${res.state.roomId}`);
+      } else {
+        setJoinError(res.error || 'Failed to join room');
+      }
+    }
+
+    function onHostAuthResponse(res) {
+      if (res.success) {
+        setHostRoom({
+          ...res.room,
+          id: String(res.room.id),
+          sessionRemainingSeconds: res.room.sessionRemainingSeconds
+        });
+      } else {
+        navigate('/');
+      }
+    }
+
+    function onOtpRotated(data) {
+      if (!data) return;
+      if (data.sessionRemaining !== undefined && data.sessionRemaining <= 0) {
+        if (window.location.pathname.startsWith('/host')) {
+          handleHostExit();
+        } else if (window.location.pathname.startsWith('/vote')) {
+          handleVoterExit();
+        }
+        return;
+      }
+
+      setHostRoom((prev) => {
+        if (!prev) return prev;
+        if (prev.id && String(prev.id) !== String(data.roomId)) return prev;
+        return {
+          ...prev,
+          passcode: data.passcode,
+          expiresIn: data.expiresIn,
+          sessionRemainingSeconds: data.sessionRemaining
+        };
+      });
+
+      setVoterState((prev) => {
+        if (!prev) return prev;
+        if (prev.roomId && String(prev.roomId) !== String(data.roomId)) return prev;
+        return {
+          ...prev,
+          expiresIn: data.expiresIn,
+          sessionRemainingSeconds: data.sessionRemaining
+        };
+      });
+    }
+
+    function onOtpTick(data) {
+      if (!data) return;
+      if (data.sessionRemaining !== undefined && data.sessionRemaining <= 0) {
+        if (window.location.pathname.startsWith('/host')) {
+          handleHostExit();
+        } else if (window.location.pathname.startsWith('/vote')) {
+          handleVoterExit();
+        }
+        return;
+      }
+
+      setHostRoom((prev) => {
+        if (!prev) return prev;
+        if (prev.id && String(prev.id) !== String(data.roomId)) return prev;
+        return {
+          ...prev,
+          expiresIn: data.expiresIn,
+          sessionRemainingSeconds: data.sessionRemaining
+        };
+      });
+
+      setVoterState((prev) => {
+        if (!prev) return prev;
+        if (prev.roomId && String(prev.roomId) !== String(data.roomId)) return prev;
+        return {
+          ...prev,
+          expiresIn: data.expiresIn,
+          sessionRemainingSeconds: data.sessionRemaining
+        };
+      });
+    }
+
+    function onTallyUpdated(data) {
+      setHostRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          tally: data.tally,
+          participants: data.participants || prev.participants
+        };
+      });
+
+      setVoterState((prev) => ({
+        ...prev,
+        tally: data.isRevealed ? data.tally : null
+      }));
+    }
+
+    function onRosterUpdated(data) {
+      setHostRoom((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          participants: data.participants,
+          participantCount: data.participantCount
+        };
+      });
+    }
+
+    function onVoteConfirmed(data) {
+      if (data.success) {
+        setVoterState((prev) => ({
+          ...prev,
+          hasVoted: true,
+          myVote: data.vote
+        }));
+      }
+    }
+
+    function onRoomLockToggled(data) {
+      setHostRoom((prev) => (prev ? { ...prev, isLocked: data.isLocked } : prev));
+      setVoterState((prev) => ({ ...prev, isLocked: data.isLocked }));
+    }
+
+    function onResultsRevealToggled(data) {
+      setHostRoom((prev) => (prev ? { ...prev, isRevealed: data.isRevealed } : prev));
+      setVoterState((prev) => ({
+        ...prev,
+        isRevealed: data.isRevealed,
+        tally: data.isRevealed ? data.tally : null
+      }));
+    }
+
+    function onTitleUpdated(data) {
+      setHostRoom((prev) => (prev ? { ...prev, title: data.title } : prev));
+      setVoterState((prev) => ({ ...prev, title: data.title }));
+    }
+
+    function onVotesReset(data) {
+      setHostRoom((prev) => (prev ? { ...prev, tally: data.tally, participants: data.participants } : prev));
+      setVoterState((prev) => ({
+        ...prev,
+        hasVoted: false,
+        myVote: null,
+        tally: prev.isRevealed ? data.tally : null
+      }));
+    }
+
+    function onPollEnded(data) {
+      setHostRoom((prev) => (prev ? { ...prev, status: 'ended', tally: data.finalTally } : prev));
+      setVoterState((prev) => ({ ...prev, status: 'ended', tally: data.finalTally }));
+    }
+
+    function onRoomClosed(data) {
+      // ONLY notify voters who were actively in this room
+      if (voterState.roomId === data.roomId) {
+        alert(`Room #${data.roomId} has been closed by the host.`);
+        handleVoterExit();
+      }
+    }
+
+    function onQuestionLaunched(data) {
+      if (data.hostState) {
+        setHostRoom(data.hostState);
+      }
+      setVoterState((prev) => ({
+        ...prev,
+        currentQuestion: data.question,
+        mode: data.mode || (data.question ? data.question.mode : prev.mode),
+        title: data.question ? data.question.text : prev.title,
+        hasVoted: false,
+        myVote: null,
+        myOrder: null,
+        tally: null
+      }));
+    }
+
+    function onQuestionClosed(data) {
+      if (data.hostState) {
+        setHostRoom(data.hostState);
+      }
+      setVoterState((prev) => ({
+        ...prev,
+        currentQuestion: data.question || (prev.currentQuestion ? { ...prev.currentQuestion, status: 'closed' } : null),
+        tally: data.tally || prev.tally
+      }));
+    }
+
+    function onSessionDataErased(data) {
+      if (data.hostState) {
+        setHostRoom(data.hostState);
+      }
+      setVoterState((prev) => ({
+        ...prev,
+        currentQuestion: null,
+        hasVoted: false,
+        myVote: null,
+        myOrder: null,
+        tally: null
+      }));
+    }
+
+    function onSessionExpired(data) {
+      if (window.location.pathname.startsWith('/host')) {
+        handleHostExit();
+      } else if (window.location.pathname.startsWith('/vote')) {
+        handleVoterExit();
+      }
+    }
+
+    socket.on('connect', onConnect);
+    socket.on('room_created', onRoomCreated);
+    socket.on('room_joined', onRoomJoined);
+    socket.on('host_auth_response', onHostAuthResponse);
+    socket.on('otp_rotated', onOtpRotated);
+    socket.on('otp_tick', onOtpTick);
+    socket.on('session_expired', onSessionExpired);
+    socket.on('tally_updated', onTallyUpdated);
+    socket.on('roster_updated', onRosterUpdated);
+    socket.on('vote_confirmed', onVoteConfirmed);
+    socket.on('room_lock_toggled', onRoomLockToggled);
+    socket.on('results_reveal_toggled', onResultsRevealToggled);
+    socket.on('title_updated', onTitleUpdated);
+    socket.on('votes_reset', onVotesReset);
+    socket.on('poll_ended', onPollEnded);
+    socket.on('room_closed', onRoomClosed);
+    socket.on('question_launched', onQuestionLaunched);
+    socket.on('question_closed', onQuestionClosed);
+    socket.on('session_data_erased', onSessionDataErased);
+
+    return () => {
+      socket.off('connect', onConnect);
+      socket.off('room_created', onRoomCreated);
+      socket.off('room_joined', onRoomJoined);
+      socket.off('host_auth_response', onHostAuthResponse);
+      socket.off('otp_rotated', onOtpRotated);
+      socket.off('otp_tick', onOtpTick);
+      socket.off('session_expired', onSessionExpired);
+      socket.off('tally_updated', onTallyUpdated);
+      socket.off('roster_updated', onRosterUpdated);
+      socket.off('vote_confirmed', onVoteConfirmed);
+      socket.off('room_lock_toggled', onRoomLockToggled);
+      socket.off('results_reveal_toggled', onResultsRevealToggled);
+      socket.off('title_updated', onTitleUpdated);
+      socket.off('votes_reset', onVotesReset);
+      socket.off('poll_ended', onPollEnded);
+      socket.off('room_closed', onRoomClosed);
+      socket.off('question_launched', onQuestionLaunched);
+      socket.off('question_closed', onQuestionClosed);
+      socket.off('session_data_erased', onSessionDataErased);
+    };
+  }, [voterState.roomId, navigate]);
+
+  const handleCreateRoom = (options) => {
+    setIsConnecting(true);
+    setCreateError(null);
+    setJoinError(null);
+    socket.emit('create_room', options);
+  };
+
+  const handleJoinRoom = ({ roomId, passcode }) => {
+    setIsConnecting(true);
+    setCreateError(null);
+    setJoinError(null);
+    socket.emit('join_room', { roomId, passcode });
+  };
+
+  const handleClearErrors = () => {
+    setCreateError(null);
+    setJoinError(null);
+  };
+
+  const handleLaunchQuestion = (questionData) => {
+    if (!hostRoom) return;
+    socket.emit('host_launch_question', {
+      roomId: hostRoom.id,
+      ...questionData
+    });
+  };
+
+  const handleCloseQuestion = () => {
+    if (!hostRoom) return;
+    socket.emit('host_close_question', {
+      roomId: hostRoom.id
+    });
+  };
+
+  const handleEraseSessionData = () => {
+    if (!hostRoom) return;
+    if (window.confirm('Are you sure you want to erase all temporary session data and question history?')) {
+      socket.emit('host_erase_session_data', {
+        roomId: hostRoom.id
+      });
+    }
+  };
+
+  const handleSubmitVote = (voteVal) => {
+    if (!voterState.roomId) return;
+    socket.emit('submit_vote', {
+      roomId: voterState.roomId,
+      vote: voteVal
+    });
+  };
+
+  const handleToggleLock = (isLocked) => {
+    if (!hostRoom) return;
+    socket.emit('host_lock_room', { roomId: hostRoom.id, isLocked });
+  };
+
+  const handleToggleReveal = (isRevealed) => {
+    if (!hostRoom) return;
+    socket.emit('host_reveal_results', { roomId: hostRoom.id, isRevealed });
+  };
+
+  const handleResetVotes = () => {
+    if (!hostRoom) return;
+    if (window.confirm('Reset all participant votes to zero?')) {
+      socket.emit('host_reset_votes', { roomId: hostRoom.id });
+    }
+  };
+
+  const handleUpdateTitle = (title) => {
+    if (!hostRoom) return;
+    socket.emit('host_update_title', { roomId: hostRoom.id, title });
+  };
+
+  const handleEndPoll = () => {
+    if (!hostRoom) return;
+    if (window.confirm('Conclude the voting session?')) {
+      socket.emit('host_end_poll', { roomId: hostRoom.id });
+    }
+  };
+
+  const handleKickParticipant = (socketId) => {
+    if (!hostRoom) return;
+    socket.emit('kick_participant', { roomId: hostRoom.id, socketId });
+  };
+
+  const handleHostExit = () => {
+    if (hostRoom) {
+      socket.emit('host_leave_room', { roomId: hostRoom.id });
+      localStorage.removeItem(`hostKey_${hostRoom.id}`);
+    }
+    setHostRoom(null);
+    navigate('/');
+  };
+
+  const handleVoterExit = () => {
+    if (voterState.roomId) {
+      socket.emit('voter_leave_room', { roomId: voterState.roomId });
+    }
+    setVoterState({
+      roomId: null,
+      title: '',
+      mode: 'assembly',
+      isLocked: false,
+      isRevealed: true,
+      status: 'active',
+      currentQuestion: null,
+      hasVoted: false,
+      myVote: null,
+      myOrder: null,
+      alias: '',
+      tally: null
+    });
+    navigate('/');
+  };
+
+  return (
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <LandingView
+            onJoinRoom={handleJoinRoom}
+            onCreateRoom={handleCreateRoom}
+            initialRoom={urlParams.room}
+            initialPin={urlParams.pin}
+            isConnecting={isConnecting}
+            createError={createError}
+            joinError={joinError}
+            onClearErrors={handleClearErrors}
+          />
+        }
+      />
+
+      <Route
+        path="/host/:roomId"
+        element={
+          <HostRouteWrapper
+            hostRoom={hostRoom}
+            onLaunchQuestion={handleLaunchQuestion}
+            onCloseQuestion={handleCloseQuestion}
+            onEraseSessionData={handleEraseSessionData}
+            onToggleLock={handleToggleLock}
+            onToggleReveal={handleToggleReveal}
+            onResetVotes={handleResetVotes}
+            onUpdateTitle={handleUpdateTitle}
+            onEndPoll={handleEndPoll}
+            onKickParticipant={handleKickParticipant}
+            onLeave={handleHostExit}
+          />
+        }
+      />
+
+      <Route
+        path="/vote/:roomId"
+        element={
+          <VoterRouteWrapper
+            voterState={voterState}
+            onSubmitVote={handleSubmitVote}
+            onLeave={handleVoterExit}
+          />
+        }
+      />
+
+      {/* Fallback */}
+      <Route
+        path="*"
+        element={
+          <LandingView
+            onJoinRoom={handleJoinRoom}
+            onCreateRoom={handleCreateRoom}
+            isConnecting={isConnecting}
+            createError={createError}
+            joinError={joinError}
+            onClearErrors={handleClearErrors}
+          />
+        }
+      />
+    </Routes>
+  );
+}
+
+// Host route protection & auth recovery
+function HostRouteWrapper({
+  hostRoom,
+  onLaunchQuestion,
+  onCloseQuestion,
+  onEraseSessionData,
+  onToggleLock,
+  onToggleReveal,
+  onResetVotes,
+  onUpdateTitle,
+  onEndPoll,
+  onKickParticipant,
+  onLeave
+}) {
+  const { roomId } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!hostRoom) {
+      const savedKey = localStorage.getItem(`hostKey_${roomId}`);
+      if (savedKey) {
+        socket.emit('host_auth', { roomId, hostKey: savedKey });
+      } else {
+        navigate('/');
+      }
+    }
+  }, [hostRoom, roomId, navigate]);
+
+  if (!hostRoom) {
+    return (
+      <div style={{ textAlign: 'center', padding: '100px 20px', color: 'var(--text-secondary)' }}>
+        <h2>Authenticating Host Session...</h2>
+      </div>
+    );
+  }
+
+  return (
+    <HostView
+      room={hostRoom}
+      onLaunchQuestion={onLaunchQuestion}
+      onCloseQuestion={onCloseQuestion}
+      onEraseSessionData={onEraseSessionData}
+      onToggleLock={onToggleLock}
+      onToggleReveal={onToggleReveal}
+      onResetVotes={onResetVotes}
+      onUpdateTitle={onUpdateTitle}
+      onEndPoll={onEndPoll}
+      onKickParticipant={onKickParticipant}
+      onLeave={onLeave}
+    />
+  );
+}
+
+// Voter route wrapper
+function VoterRouteWrapper({
+  voterState,
+  onSubmitVote,
+  onLeave
+}) {
+  const { roomId } = useParams();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!voterState.roomId || String(voterState.roomId) !== String(roomId)) {
+      navigate(`/?room=${roomId}`);
+    }
+  }, [voterState.roomId, roomId, navigate]);
+
+  if (!voterState.roomId) {
+    return null;
+  }
+
+  return (
+    <VoterView
+      voterState={voterState}
+      onSubmitVote={onSubmitVote}
+      onLeave={onLeave}
+    />
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
+    </BrowserRouter>
+  );
+}
