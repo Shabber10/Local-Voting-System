@@ -125,4 +125,14 @@ def create_app():
                 "message": "VoteSphere Flask API running. Start frontend with npm run dev inside frontend/"
             })
 
+    # SPA Fallback for browser page refreshes on client-side routes (e.g. /host/<id>, /vote/<id>)
+    @app.errorhandler(404)
+    def handle_spa_refresh_fallback(e):
+        if request.path.startswith("/api/"):
+            return jsonify({"error": "Resource not found"}), 404
+        index_file = os.path.join(frontend_dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return send_from_directory(frontend_dist_dir, "index.html")
+        return jsonify({"message": "Frontend build not found. Please run npm run build."}), 404
+
     return app, socketio
