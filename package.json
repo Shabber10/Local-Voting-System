@@ -3,8 +3,8 @@
   "version": "2.0.0",
   "description": "Secure Local Real-Time Voting & Rating System with React Frontend, Python Flask Backend, TOTP dynamic passcodes, and anti-cheat tab-switching protection.",
   "scripts": {
-    "postinstall": "(pip install --break-system-packages -r backend/requirements.txt || pip3 install --break-system-packages -r backend/requirements.txt || pip install -r backend/requirements.txt) && npm --prefix frontend install && npm --prefix frontend run build",
-    "build": "(pip install --break-system-packages -r backend/requirements.txt || pip3 install --break-system-packages -r backend/requirements.txt || pip install -r backend/requirements.txt) && npm --prefix frontend install && npm --prefix frontend run build",
+    "postinstall": "(pip install -r backend/requirements.txt --target backend/libs || pip3 install -r backend/requirements.txt --target backend/libs) && npm --prefix frontend install && npm --prefix frontend run build",
+    "build": "(pip install -r backend/requirements.txt --target backend/libs || pip3 install -r backend/requirements.txt --target backend/libs) && npm --prefix frontend install && npm --prefix frontend run build",
     "start": "python backend/run.py",
     "dev:backend": "python backend/run.py",
     "dev:frontend": "npm --prefix frontend run dev",

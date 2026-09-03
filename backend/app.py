@@ -1,10 +1,14 @@
 import os
 import sys
 
-# Ensure backend root is on sys.path
+# Ensure backend root and libs directory are on sys.path
 backend_dir = os.path.dirname(os.path.abspath(__file__))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
+
+libs_dir = os.path.join(backend_dir, "libs")
+if os.path.isdir(libs_dir) and libs_dir not in sys.path:
+    sys.path.insert(0, libs_dir)
 
 # Ensure user site-packages are on sys.path (Render installs pip to ~/.local)
 import site
