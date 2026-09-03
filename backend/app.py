@@ -104,9 +104,9 @@ def create_app():
             csv_content = room_service.generate_csv_report(room_id)
             return Response(
                 csv_content,
-                mimetype="text/csv",
+                mimetype="text/csv; charset=utf-8",
                 headers={
-                    "Content-disposition": f"attachment; filename=votesphere_room_{room_id}_report.csv"
+                    "Content-Disposition": f"attachment; filename=votesphere_room_{room_id}_report.csv"
                 }
             )
         except Exception as e:

@@ -667,13 +667,15 @@ class RoomService:
             }
 
     def generate_csv_report(self, room_id: str) -> str:
-        """Comprehensive CSV report including all questions, sequential voter orders, and matrix view."""
+        """Comprehensive, neat, and clean CSV report adhering to RFC 4180 with UTF-8 BOM for Excel."""
+        import csv
+        import io
+
         with self._lock:
             room = self._rooms.get(room_id)
             if not room:
                 raise ValueError("Room not found")
 
-            # Collect all questions (archived + current active if any)
             all_questions = list(room.get("questionHistory", []))
             if room.get("currentQuestion"):
                 all_questions.append(room["currentQuestion"])
@@ -681,110 +683,181 @@ class RoomService:
             now_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
             created_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(room['createdAt']))
 
-            lines = [
-                "================================================================================",
-                "VOTESPHERE COMPREHENSIVE SESSION REPORT",
-                "================================================================================",
-                f"Room ID,{room['id']}",
-                f"Session Title,\"{room['title']}\"",
-                f"Generated At,{now_str}",
-                f"Created At,{created_str}",
-                f"Total Registered Voters,{len(room['participants'])}",
-                f"Total Questions/Rounds Asked,{len(all_questions)}",
-                ""
-            ]
+            output = io.StringIO()
+            # UTF-8 BOM so Excel on Windows opens clean without garbled characters
+            output.write('\ufeff')
+            writer = csv.writer(output, lineterminator='\n')
 
             # ---------------------------------------------------------
-            # SECTION 1: Question-by-Question Summary Breakdown
+            # 1. SESSION OVERVIEW METADATA
             # ---------------------------------------------------------
-            lines.append("--------------------------------------------------------------------------------")
-            lines.append("SECTION 1: QUESTION-BY-QUESTION SUMMARY & TALLIES")
-            lines.append("--------------------------------------------------------------------------------")
-            lines.append("Round #,Type,Mode,Question Prompt / Message,Total Votes,Result Summary")
+            writer.writerow(["VOTESPHERE OFFICIAL SESSION REPORT"])
+            writer.writerow(["Property", "Value"])
+            writer.writerow(["Room ID", room['id']])
+            writer.writerow(["Session Title", room.get('title', 'VoteSphere Session')])
+            writer.writerow(["Total Registered Voters", len(room.get('participants', {}))])
+            writer.writerow(["Total Questions / Rounds", len(all_questions)])
+            writer.writerow(["Session Created At", created_str])
+            writer.writerow(["Report Exported At", now_str])
+            writer.writerow([])
 
+            # ---------------------------------------------------------
+            # 2. QUESTION-BY-QUESTION SUMMARY & TALLIES
+            # ---------------------------------------------------------
+            writer.writerow(["QUESTION ROUNDS & RESULTS SUMMARY"])
+            writer.writerow([
+                "Round #",
+                "Type",
+                "Mode",
+                "Question Prompt",
+                "Total Ballots Cast",
+                "Leading / Final Result",
+                "Yes Count",
+                "No Count",
+                "Maybe Count",
+                "NOTA Count",
+                "Average Rating (1-10)"
+            ])
+
+            if not all_questions:
+                writer.writerow(["None", "N/A", "N/A", "No questions were launched in this session.", 0, "N/A", "N/A", "N/A", "N/A", "N/A", "N/A"])
+            else:
+                for q in all_questions:
+                    q_id = q.get("id")
+                    q_type = q.get("type", "poll")
+                    q_mode = q.get("mode", "assembly")
+                    q_text = q.get("text", "")
+                    votes_map = q.get("votes", {})
+                    t_votes = len(votes_map)
+
+                    yes_cnt = "N/A"
+                    no_cnt = "N/A"
+                    maybe_cnt = "N/A"
+                    nota_cnt = "N/A"
+                    avg_rating = "N/A"
+                    result_summary = "N/A"
+
+                    if q_type == "message":
+                        result_summary = "Announcement Broadcast"
+                    elif q_mode == Config.MODE_ASSEMBLY:
+                        tally = self._calculate_question_tally_unlocked(room, q)
+                        counts = tally.get("counts", {})
+                        yes_cnt = counts.get("Yes", 0)
+                        no_cnt = counts.get("No", 0)
+                        maybe_cnt = counts.get("Maybe", 0)
+                        nota_cnt = counts.get("NOTA", 0)
+                        
+                        if t_votes > 0:
+                            top_choice = max(["Yes", "No", "Maybe", "NOTA"], key=lambda k: counts.get(k, 0))
+                            pct = (counts.get(top_choice, 0) / t_votes) * 100
+                            result_summary = f"{top_choice} ({pct:.1f}%)"
+                        else:
+                            result_summary = "No Votes Cast"
+                    elif q_mode == Config.MODE_RATING:
+                        tally = self._calculate_question_tally_unlocked(room, q)
+                        avg_val = tally.get("average", 0)
+                        avg_rating = f"{avg_val:.1f}"
+                        if t_votes > 0:
+                            result_summary = f"Average {avg_val:.1f}/10 (Range: {tally.get('min', 0)}-{tally.get('max', 0)})"
+                        else:
+                            result_summary = "No Ratings Cast"
+
+                    writer.writerow([
+                        f"Round {q_id}",
+                        q_type.capitalize(),
+                        q_mode.capitalize(),
+                        q_text,
+                        t_votes,
+                        result_summary,
+                        yes_cnt,
+                        no_cnt,
+                        maybe_cnt,
+                        nota_cnt,
+                        avg_rating
+                    ])
+
+            writer.writerow([])
+
+            # ---------------------------------------------------------
+            # 3. CHRONOLOGICAL AUDIT TRAIL LOG
+            # ---------------------------------------------------------
+            writer.writerow(["CHRONOLOGICAL BALLOT AUDIT LOG"])
+            writer.writerow([
+                "Round #",
+                "Question Prompt",
+                "Ballot Order #",
+                "Voter Alias",
+                "Submitted Choice",
+                "Submission Timestamp"
+            ])
+
+            has_votes = False
             for q in all_questions:
                 q_id = q.get("id")
-                q_type = q.get("type", "poll")
-                q_mode = q.get("mode", "assembly")
-                q_text = q.get("text", "").replace('"', '""')
-                votes_map = q.get("votes", {})
-                t_votes = len(votes_map)
-
-                if q_type == "message":
-                    summary = "Announcement Broadcast"
-                elif q_mode == Config.MODE_ASSEMBLY:
-                    tally = self._calculate_question_tally_unlocked(room, q)
-                    counts = tally.get("counts", {})
-                    summary = f"Yes: {counts.get('Yes', 0)} | No: {counts.get('No', 0)} | Maybe: {counts.get('Maybe', 0)} | NOTA: {counts.get('NOTA', 0)}"
-                elif q_mode == Config.MODE_RATING:
-                    tally = self._calculate_question_tally_unlocked(room, q)
-                    summary = f"Average: {tally.get('average', 0)}/10 (Range: {tally.get('min', 0)}-{tally.get('max', 0)})"
-                else:
-                    summary = "N/A"
-
-                lines.append(f"Q#{q_id},{q_type},{q_mode},\"{q_text}\",{t_votes},\"{summary}\"")
-
-            lines.append("")
-
-            # ---------------------------------------------------------
-            # SECTION 2: Chronological / Sequential Votes Log
-            # ---------------------------------------------------------
-            lines.append("--------------------------------------------------------------------------------")
-            lines.append("SECTION 2: SEQUENTIAL VOTING RESPONSES LOG (ORDER-WISE)")
-            lines.append("--------------------------------------------------------------------------------")
-            lines.append("Round #,Vote Order #,Voter Alias,Response / Rating,Timestamp")
-
-            has_any_votes = False
-            for q in all_questions:
-                q_id = q.get("id")
+                q_text = q.get("text", "")
                 votes_list = []
                 for s_id, v_info in q.get("votes", {}).items():
                     if isinstance(v_info, dict):
                         votes_list.append(v_info)
                     else:
-                        alias = room["participants"].get(s_id, {}).get("alias", f"Voter ({s_id[:4]})")
-                        votes_list.append({"alias": alias, "vote": v_info, "order": 1, "timestamp": q.get("createdAt", time.time())})
+                        alias = room["participants"].get(s_id, {}).get("alias", f"Voter ({str(s_id)[:4]})")
+                        votes_list.append({
+                            "alias": alias,
+                            "vote": v_info,
+                            "order": 1,
+                            "timestamp": q.get("createdAt", time.time())
+                        })
 
-                # Sort by order of vote submission
                 votes_list.sort(key=lambda x: x.get("order", 0))
-
                 for item in votes_list:
-                    has_any_votes = True
-                    t_str = time.strftime('%H:%M:%S', time.localtime(item.get("timestamp", time.time())))
-                    lines.append(f"Q#{q_id},{item.get('order', '-')},{item.get('alias', 'Unknown')},{item.get('vote', '')},{t_str}")
+                    has_votes = True
+                    t_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(item.get("timestamp", time.time())))
+                    writer.writerow([
+                        f"Round {q_id}",
+                        q_text,
+                        item.get("order", 1),
+                        item.get("alias", "Unknown Voter"),
+                        item.get("vote", ""),
+                        t_str
+                    ])
 
-            if not has_any_votes:
-                lines.append("No votes recorded yet.")
+            if not has_votes:
+                writer.writerow(["None", "N/A", "N/A", "No individual ballots recorded.", "N/A", "N/A"])
 
-            lines.append("")
+            writer.writerow([])
 
             # ---------------------------------------------------------
-            # SECTION 3: Voter Summary Matrix (Voter x Question)
+            # 4. VOTER PARTICIPATION MATRIX
             # ---------------------------------------------------------
-            lines.append("--------------------------------------------------------------------------------")
-            lines.append("SECTION 3: VOTER PARTICIPATION MATRIX")
-            lines.append("--------------------------------------------------------------------------------")
+            writer.writerow(["VOTER PARTICIPATION MATRIX"])
+            matrix_headers = ["Voter Alias", "Status", "Strikes"]
+            for q in all_questions:
+                clean_q_prompt = (q.get("text") or f"Question #{q.get('id')}").strip()
+                if len(clean_q_prompt) > 35:
+                    clean_q_prompt = clean_q_prompt[:32] + "..."
+                matrix_headers.append(f"Round {q.get('id')}: {clean_q_prompt}")
 
-            q_headers = [f"Q#{q.get('id')} ({q.get('text', '')[:20]})" for q in all_questions]
-            matrix_header = ["Voter Alias", "Status", "Strikes"] + q_headers
-            lines.append(",".join(f"\"{h}\"" for h in matrix_header))
+            writer.writerow(matrix_headers)
 
-            for p in room["participants"].values():
-                s_id = p["id"]
-                p_alias = p["alias"]
-                p_status = "Disqualified" if p.get("disqualified") else "Active"
-                p_strikes = p.get("strikes", 0)
+            if not room.get("participants"):
+                writer.writerow(["No voters joined this session.", "N/A", 0] + ["N/A"] * len(all_questions))
+            else:
+                for p in room["participants"].values():
+                    p_id = p.get("id")
+                    p_alias = p.get("alias", "Unknown")
+                    p_status = "Disqualified" if p.get("disqualified") else "Active"
+                    p_strikes = p.get("strikes", 0)
 
-                row = [p_alias, p_status, str(p_strikes)]
-                for q in all_questions:
-                    v_info = q.get("votes", {}).get(s_id)
-                    if v_info is not None:
-                        val = v_info["vote"] if isinstance(v_info, dict) else v_info
-                        row.append(str(val))
-                    else:
-                        row.append("Did not vote")
-                lines.append(",".join(f"\"{col}\"" for col in row))
+                    row = [p_alias, p_status, p_strikes]
+                    for q in all_questions:
+                        v_info = q.get("votes", {}).get(p_id)
+                        if v_info is not None:
+                            val = v_info["vote"] if isinstance(v_info, dict) else v_info
+                            row.append(str(val))
+                        else:
+                            row.append("Did Not Vote")
+                    writer.writerow(row)
 
-            return "\n".join(lines)
+            return output.getvalue()
 
 room_service = RoomService()
