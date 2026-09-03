@@ -211,17 +211,19 @@
   z-index: 10;
 }
 
-/* Host Grid Layout */
+/* Host Grid Layout: Clean full-width unified dashboard */
 .host-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: clamp(14px, 3vw, 24px);
+  width: 100%;
 }
 
-.host-left-col, .host-right-col {
+.host-left-col {
   display: flex;
   flex-direction: column;
   gap: clamp(14px, 3vw, 20px);
+  width: 100%;
 }
 
 .poll-control-card, .tally-card, .roster-card {

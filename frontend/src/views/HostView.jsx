@@ -488,85 +488,6 @@ export default function HostView({
                 )}
               </>
             )}
-
-            {/* 3. SESSION QUESTION HISTORY ACCORDION */}
-            {questionHistory.length > 0 && (
-              <div className="glass-card" style={{ marginTop: '20px', padding: '18px 22px' }}>
-                <h3 style={{ fontSize: '1rem', marginBottom: '12px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span>📜 Completed Rounds History ({questionHistory.length})</span>
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: 220, overflowY: 'auto' }}>
-                  {questionHistory.map((hq) => (
-                    <div
-                      key={hq.id}
-                      style={{
-                        padding: '10px 14px',
-                        background: 'rgba(255,255,255,0.03)',
-                        borderRadius: 'var(--radius-sm)',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center'
-                      }}
-                    >
-                      <div>
-                        <strong style={{ color: 'var(--accent-cyan)', marginRight: '8px' }}>#{hq.id}</strong>
-                        <span>{hq.text}</span>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '10px' }}>
-                          ({hq.mode.toUpperCase()})
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--accent-emerald)', fontWeight: 700 }}>
-                        {hq.totalVotes} votes
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Right: Real-Time Roster */}
-          <div className="host-right-col">
-            <div className="glass-card roster-card">
-              <div className="roster-header">
-                <div className="roster-title">
-                  <h3>Voter Roster</h3>
-                  <span className="badge-count" id="rosterBadgeCount">{totalParticipants} Connected</span>
-                </div>
-                <button
-                  type="button"
-                  className="btn btn-xs btn-outline"
-                  onClick={handleExportCsv}
-                  title="Download CSV Report"
-                >
-                  📥 Export
-                </button>
-              </div>
-
-              <div className="roster-list-container" id="rosterListContainer">
-                {participants.length === 0 ? (
-                  <div className="empty-roster-msg" style={{ textAlign: 'center', padding: '24px 10px', color: 'var(--text-muted)' }}>
-                    <div style={{ fontSize: '2rem', marginBottom: '8px' }}>⏳</div>
-                    <p>Waiting for voters to join using Code <strong style={{ color: 'var(--accent-cyan)' }}>#{room.id}</strong> and Passcode...</p>
-                  </div>
-                ) : (
-                  participants.map((p) => (
-                    <div key={p.id} className="roster-item">
-                      <div className="roster-user-info">
-                        <span>👤</span>
-                        <span>{p.alias || 'Voter'}</span>
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <span className={`roster-status-badge ${p.hasVoted ? 'status-voted' : 'status-waiting'}`}>
-                          {p.hasVoted ? '✓ Voted' : 'Waiting...'}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </main>
@@ -613,24 +534,20 @@ export default function HostView({
           <button type="button" className="modal-close-btn" onClick={() => setIsVoterModalOpen(false)}>
             ✕
           </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>👥 Connected Voters</span>
-                <span className="badge-count" style={{ fontSize: '0.78rem' }}>{totalParticipants} Total</span>
-              </h3>
-              <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+
+          <div className="popup-modal-header">
+            <div className="popup-header-icon-box">
+              <span>👥</span>
+            </div>
+            <div className="popup-header-info">
+              <div className="popup-header-title-row">
+                <h3>Connected Voters</h3>
+                <span className="popup-badge-pill">{totalParticipants} Active</span>
+              </div>
+              <p className="popup-header-desc">
                 Live participant roster for Room #{room.id}
               </p>
             </div>
-            <button
-              type="button"
-              className="btn btn-xs btn-outline"
-              onClick={handleExportCsv}
-              title="Download CSV Report"
-            >
-              📥 Export CSV
-            </button>
           </div>
 
           <div className="roster-list-container" style={{ maxHeight: 380, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -641,44 +558,26 @@ export default function HostView({
               </div>
             ) : (
               participants.map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: 'var(--radius-sm)',
-                    border: '1px solid rgba(255, 255, 255, 0.06)'
-                  }}
-                >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '1.2rem' }}>👤</span>
+                <div key={p.id} className="popup-voter-card">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <div className="popup-voter-avatar">
+                      <span>👤</span>
+                    </div>
                     <div>
-                      <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#fff' }}>{p.alias || 'Voter'}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>ID: {p.id.slice(0, 12)}...</div>
+                      <div className="popup-voter-name">{p.alias || 'Voter'}</div>
+                      <div className="popup-voter-id">ID: {p.id.slice(0, 10)}...</div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span className={`roster-status-badge ${p.hasVoted ? 'status-voted' : 'status-waiting'}`}>
-                      {p.hasVoted ? '✓ Voted' : 'Waiting...'}
+                      {p.hasVoted ? '✓ Voted' : '⏳ Waiting'}
                     </span>
                     {onKickParticipant && (
                       <button
                         type="button"
+                        className="popup-btn-kick"
                         onClick={() => onKickParticipant(p.id)}
-                        title="Disqualify/Remove voter"
-                        style={{
-                          background: 'rgba(239, 68, 68, 0.15)',
-                          border: '1px solid rgba(239, 68, 68, 0.35)',
-                          color: '#f87171',
-                          borderRadius: '6px',
-                          padding: '3px 8px',
-                          fontSize: '0.72rem',
-                          cursor: 'pointer',
-                          fontWeight: 700
-                        }}
+                        title="Remove voter from session"
                       >
                         Remove
                       </button>
@@ -697,68 +596,42 @@ export default function HostView({
           <button type="button" className="modal-close-btn" onClick={() => setIsHistoryModalOpen(false)}>
             ✕
           </button>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', borderBottom: '1px solid rgba(255,255,255,0.08)', paddingBottom: '12px' }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: '1.2rem', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span>📜 Completed Rounds History</span>
-                <span className="badge-count" style={{ fontSize: '0.78rem' }}>{questionHistory.length} Rounds</span>
-              </h3>
-              <p style={{ margin: '3px 0 0 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                Audit of all concluded questions and poll rounds
+
+          <div className="popup-modal-header">
+            <div className="popup-header-icon-box history-icon-box">
+              <span>📜</span>
+            </div>
+            <div className="popup-header-info">
+              <div className="popup-header-title-row">
+                <h3>Rounds History</h3>
+                <span className="popup-badge-pill history-badge-pill">{questionHistory.length} Rounds</span>
+              </div>
+              <p className="popup-header-desc">
+                Concluded questions and poll results for this session
               </p>
             </div>
-            <button
-              type="button"
-              className="btn btn-xs btn-outline"
-              onClick={handleExportCsv}
-              title="Download CSV Report"
-            >
-              📥 Export CSV
-            </button>
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: 400, overflowY: 'auto' }}>
             {questionHistory.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '36px 10px', color: 'var(--text-muted)' }}>
                 <div style={{ fontSize: '2.4rem', marginBottom: '10px' }}>📜</div>
-                <p>No completed rounds yet. Launch and close questions to view history here.</p>
+                <p>No completed rounds yet. Conclude a question to review results here.</p>
               </div>
             ) : (
               questionHistory.map((hq) => (
-                <div
-                  key={hq.id}
-                  style={{
-                    padding: '12px 16px',
-                    background: 'rgba(255, 255, 255, 0.03)',
-                    borderRadius: 'var(--radius-md)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    gap: '12px'
-                  }}
-                >
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <strong style={{ color: 'var(--accent-cyan)' }}>Round #{hq.id}</strong>
-                      <span style={{
-                        fontSize: '0.7rem',
-                        padding: '2px 8px',
-                        borderRadius: '10px',
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        color: 'var(--text-muted)',
-                        textTransform: 'uppercase',
-                        fontWeight: 700
-                      }}>
-                        {hq.mode}
-                      </span>
+                <div key={hq.id} className="popup-history-card">
+                  <div className="popup-history-top">
+                    <div className="popup-history-round-tag">
+                      <strong>Round #{hq.id}</strong>
+                      <span className="popup-history-mode-pill">{hq.mode}</span>
                     </div>
-                    <div style={{ fontSize: '0.92rem', color: '#fff', wordBreak: 'break-word', fontWeight: 600 }}>
-                      {hq.text}
+                    <div className="popup-history-votes-pill">
+                      {hq.totalVotes} votes
                     </div>
                   </div>
-                  <div style={{ fontSize: '0.88rem', color: 'var(--accent-emerald)', fontWeight: 800, whiteSpace: 'nowrap' }}>
-                    {hq.totalVotes} votes
+                  <div className="popup-history-text">
+                    {hq.text}
                   </div>
                 </div>
               ))
