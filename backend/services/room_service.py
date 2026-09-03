@@ -41,16 +41,16 @@ class RoomService:
     def create_room(self, options: dict, host_socket_id: str) -> tuple[dict, str]:
         with self._lock:
             custom_id = options.get("customRoomId")
-            if custom_id and str(custom_id).strip():
-                room_id = str(custom_id).strip()
-                existing = self._rooms.get(room_id)
-                if existing:
-                    if existing.get("status") != "active":
-                        del self._rooms[room_id]
-                    elif existing.get("hostSocketId") != host_socket_id:
-                        raise ValueError(f"Room #{room_id} is already in use. Please pick another number.")
-            else:
-                room_id = self.generate_unique_room_id()
+            if not custom_id or not str(custom_id).strip():
+                raise ValueError("Please provide a 4-digit Room Number or click Random.")
+
+            room_id = str(custom_id).strip()
+            existing = self._rooms.get(room_id)
+            if existing:
+                if existing.get("status") != "active":
+                    del self._rooms[room_id]
+                elif existing.get("hostSocketId") != host_socket_id:
+                    raise ValueError(f"Room #{room_id} is already in use. Please pick another number.")
 
             host_key = f"host_{uuid.uuid4().hex[:8]}"
             mode = options.get("mode", Config.MODE_ASSEMBLY)

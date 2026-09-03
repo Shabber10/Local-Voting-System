@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Navbar from '../components/Navbar';
 import PinInput from '../components/PinInput';
 
@@ -23,6 +23,11 @@ export default function LandingView({
   const [createRoomId, setCreateRoomId] = useState('');
   const [localJoinError, setLocalJoinError] = useState(null);
   const [localCreateError, setLocalCreateError] = useState(null);
+
+  // PIN Input Refs for programmatically focusing & dismissing keypad
+  const roomPinRef = useRef(null);
+  const passcodePinRef = useRef(null);
+  const createPinRef = useRef(null);
 
   useEffect(() => {
     if (initialRoom || initialPin) {
@@ -65,23 +70,67 @@ export default function LandingView({
     clearAllErrors();
     const randomCode = Math.floor(1000 + Math.random() * 9000).toString();
     setCreateRoomId(randomCode);
+    createPinRef.current?.blurAll();
   };
 
   const handleJoinSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
     if (joinRoomId.length !== 4 || joinPasscode.length !== 4) return;
     clearAllErrors();
+    roomPinRef.current?.blurAll();
+    passcodePinRef.current?.blurAll();
     onJoinRoom({
       roomId: joinRoomId,
       passcode: joinPasscode
     });
   };
 
+  const handleRoomCodeComplete = (roomVal) => {
+    if (joinPasscode.length === 4) {
+      // Both 4 digits filled: dismiss keyboard & auto-submit!
+      roomPinRef.current?.blurAll();
+      passcodePinRef.current?.blurAll();
+      clearAllErrors();
+      onJoinRoom({
+        roomId: roomVal,
+        passcode: joinPasscode
+      });
+    } else {
+      // Auto-advance to passcode
+      setTimeout(() => {
+        passcodePinRef.current?.focusFirst();
+      }, 50);
+    }
+  };
+
+  const handlePasscodeComplete = (passVal) => {
+    if (joinRoomId.length === 4) {
+      // Both 4 digits filled: dismiss keyboard & auto-submit!
+      roomPinRef.current?.blurAll();
+      passcodePinRef.current?.blurAll();
+      clearAllErrors();
+      onJoinRoom({
+        roomId: joinRoomId,
+        passcode: passVal
+      });
+    } else {
+      // Room code still needs to be filled: focus room code
+      setTimeout(() => {
+        roomPinRef.current?.focusFirst();
+      }, 50);
+    }
+  };
+
   const handleCreateSubmit = (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    if (!createRoomId || createRoomId.trim().length !== 4) {
+      setLocalCreateError('Please enter a 4-digit Room Number or click Random.');
+      return;
+    }
     clearAllErrors();
+    createPinRef.current?.blurAll();
     onCreateRoom({
-      customRoomId: createRoomId || null,
+      customRoomId: createRoomId.trim(),
       mode: 'assembly'
     });
   };
@@ -242,11 +291,14 @@ export default function LandingView({
             <div className="form-group">
               <label>4-Digit Room Code</label>
               <PinInput
+                ref={roomPinRef}
                 value={joinRoomId}
                 onChange={(val) => {
                   setJoinRoomId(val);
                   clearAllErrors();
                 }}
+                onComplete={handleRoomCodeComplete}
+                onEnter={handleJoinSubmit}
                 autoFocus={true}
                 disabled={isConnecting}
               />
@@ -259,11 +311,14 @@ export default function LandingView({
                 <span className="live-hint">⏱️ Live on Host Screen</span>
               </div>
               <PinInput
+                ref={passcodePinRef}
                 value={joinPasscode}
                 onChange={(val) => {
                   setJoinPasscode(val);
                   clearAllErrors();
                 }}
+                onComplete={handlePasscodeComplete}
+                onEnter={handleJoinSubmit}
                 isGold={true}
                 disabled={isConnecting}
               />
@@ -330,11 +385,16 @@ export default function LandingView({
               <label>Set 4-Digit Room Code</label>
               <div className="pin-input-action-row">
                 <PinInput
+                  ref={createPinRef}
                   value={createRoomId}
                   onChange={(val) => {
                     setCreateRoomId(val);
                     clearAllErrors();
                   }}
+                  onComplete={() => {
+                    createPinRef.current?.blurAll();
+                  }}
+                  onEnter={handleCreateSubmit}
                   disabled={isConnecting}
                 />
                 <button 
@@ -351,10 +411,10 @@ export default function LandingView({
             <button 
               type="submit" 
               className="btn btn-secondary btn-block btn-glow"
-              disabled={isConnecting}
+              disabled={isConnecting || createRoomId.length !== 4}
               style={{ marginTop: '8px' }}
             >
-              <span>{isConnecting ? 'Launching Session...' : 'Create Room & Launch Dashboard'}</span>
+              <span>{isConnecting ? 'Creating Room...' : 'Create Room'}</span>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                 <polyline points="9 18 15 12 9 6" />
               </svg>

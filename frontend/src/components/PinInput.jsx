@@ -1,14 +1,32 @@
-import React, { useRef } from 'react';
+import React, { useRef, useImperativeHandle, forwardRef } from 'react';
 
-export default function PinInput({ 
+const PinInput = forwardRef(function PinInput({ 
   value = '', 
   onChange, 
+  onComplete,
+  onEnter,
   isGold = false, 
   autoFocus = false,
   length = 4,
-  disabled = false
-}) {
+  disabled = false,
+  autoBlurOnComplete = true
+}, ref) {
   const inputRefs = useRef([]);
+
+  useImperativeHandle(ref, () => ({
+    focusFirst: () => {
+      inputRefs.current[0]?.focus();
+    },
+    focusAt: (index) => {
+      inputRefs.current[index]?.focus();
+    },
+    blurAll: () => {
+      inputRefs.current.forEach(el => el?.blur());
+      if (document.activeElement && typeof document.activeElement.blur === 'function') {
+        document.activeElement.blur();
+      }
+    }
+  }));
 
   const digits = Array.from({ length }, (_, i) => value[i] || '');
 
@@ -28,14 +46,39 @@ export default function PinInput({
     const combined = newDigits.join('');
     onChange(combined);
 
-    // Auto-focus next input
     if (lastChar && index < length - 1) {
+      // Auto-focus next input
       inputRefs.current[index + 1]?.focus();
+    } else if (lastChar && index === length - 1) {
+      // 4th number pressed!
+      if (autoBlurOnComplete) {
+        // Blur immediately so on-screen mobile keypad closes
+        inputRefs.current[index]?.blur();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+          document.activeElement.blur();
+        }
+      }
+      if (onComplete) {
+        onComplete(combined);
+      }
     }
   };
 
   const handleKeyDown = (index, e) => {
-    if (e.key === 'Backspace') {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (autoBlurOnComplete) {
+        inputRefs.current[index]?.blur();
+        if (document.activeElement && typeof document.activeElement.blur === 'function') {
+          document.activeElement.blur();
+        }
+      }
+      if (onEnter) {
+        onEnter();
+      } else if (value.length === length && onComplete) {
+        onComplete(value);
+      }
+    } else if (e.key === 'Backspace') {
       if (!digits[index] && index > 0) {
         inputRefs.current[index - 1]?.focus();
       }
@@ -51,8 +94,20 @@ export default function PinInput({
     const pastedData = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, length);
     if (pastedData) {
       onChange(pastedData);
-      const nextFocus = Math.min(pastedData.length, length - 1);
-      inputRefs.current[nextFocus]?.focus();
+      if (pastedData.length === length) {
+        if (autoBlurOnComplete) {
+          inputRefs.current.forEach(el => el?.blur());
+          if (document.activeElement && typeof document.activeElement.blur === 'function') {
+            document.activeElement.blur();
+          }
+        }
+        if (onComplete) {
+          onComplete(pastedData);
+        }
+      } else {
+        const nextFocus = Math.min(pastedData.length, length - 1);
+        inputRefs.current[nextFocus]?.focus();
+      }
     }
   };
 
@@ -78,4 +133,6 @@ export default function PinInput({
       ))}
     </div>
   );
-}
+});
+
+export default PinInput;
