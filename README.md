@@ -114,3 +114,21 @@ Open **[http://localhost:5173](http://localhost:5173)** in your browser.
 
 ### 4. Connect from Mobile Devices (Same Wi-Fi)
 Open `http://<YOUR_LOCAL_IP>:5000` (or `:5173`) on any smartphone or tablet connected to your local network.
+
+---
+
+## ☁️ Cloud Deployment: Render vs. Netlify
+
+### Why Render is Recommended for VoteSphere:
+* **Real-Time WebSockets**: VoteSphere requires a continuous, persistent WebSocket connection for real-time OTP rotation, live vote counting, and countdown tickers. Netlify is built for static sites/serverless functions with strict request timeouts and does not support persistent Python WebSocket servers.
+* **Persistent Background Workers**: The backend runs a continuous daemon thread that computes TOTP rotation and session timeouts. Render's **Web Service** supports this out-of-the-box on its free tier.
+* **Unified Full-Stack Deployment**: Both the React/Vite frontend and Python Flask backend run seamlessly on a single Render Web Service with automated HTTPS and zero CORS configuration needed.
+
+### 🚀 Deploying to Render in 2 Clicks:
+1. Log in to your [Render Dashboard](https://dashboard.render.com).
+2. Click **New +** $\rightarrow$ **Blueprint**.
+3. Select this repository: `https://github.com/Shabber10/Local-Voting-System`.
+4. Render will detect `render.yaml` automatically:
+   - **Build Command**: `npm --prefix frontend install && npm --prefix frontend run build && pip install -r backend/requirements.txt`
+   - **Start Command**: `python backend/run.py`
+5. Click **Apply**. Your app will build and deploy live at `https://<your-app-name>.onrender.com`!
