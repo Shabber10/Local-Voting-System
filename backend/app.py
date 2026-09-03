@@ -6,6 +6,20 @@ backend_dir = os.path.dirname(os.path.abspath(__file__))
 if backend_dir not in sys.path:
     sys.path.insert(0, backend_dir)
 
+# Ensure user site-packages are on sys.path (Render installs pip to ~/.local)
+import site
+user_site = site.getusersitepackages() if hasattr(site, 'getusersitepackages') else None
+for p in [
+    user_site,
+    "/opt/render/.local/lib/python3.11/site-packages",
+    "/root/.local/lib/python3.11/site-packages",
+    os.path.expanduser("~/.local/lib/python3.11/site-packages"),
+    os.path.expanduser("~/.local/lib/python3.10/site-packages"),
+    os.path.expanduser("~/.local/lib/python3.12/site-packages")
+]:
+    if p and os.path.isdir(p) and p not in sys.path:
+        sys.path.insert(0, p)
+
 import datetime
 from flask import Flask, jsonify, Response, request, send_from_directory
 from flask_cors import CORS
