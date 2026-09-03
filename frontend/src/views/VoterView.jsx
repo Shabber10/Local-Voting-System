@@ -26,7 +26,6 @@ export default function VoterView({
   }, [voterState.hasVoted, voterState.currentQuestion?.id]);
 
   const handleAssemblyVote = (choice) => {
-    if (voterState.isLocked) return;
     if (voterState.currentQuestion?.status === 'closed') return;
     if (navigator.vibrate) navigator.vibrate(50);
     onSubmitVote(choice);
@@ -34,7 +33,6 @@ export default function VoterView({
 
   const handleRatingSubmit = (e) => {
     e.preventDefault();
-    if (voterState.isLocked) return;
     if (voterState.currentQuestion?.status === 'closed') return;
     if (navigator.vibrate) navigator.vibrate(50);
     onSubmitVote(ratingScore);
