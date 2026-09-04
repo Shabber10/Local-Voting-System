@@ -320,7 +320,7 @@ class RoomService:
                 p["hasVoted"] = False
             return True
 
-    def submit_vote(self, room_id: str, socket_id: str, vote_value, session_id: str = None) -> dict:
+    def submit_vote(self, room_id: str, socket_id: str, vote_value, session_id: str = None, reason: str = "") -> dict:
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
@@ -360,6 +360,8 @@ class RoomService:
                     except:
                         raise ValueError(f"Rating must be an integer between {Config.RATING_MIN} and {Config.RATING_MAX}")
 
+            clean_reason = (reason or "").strip()[:200]
+
             if vote_value is None:
                 # Retract vote
                 curr_q["votes"].pop(voter_key, None)
@@ -378,6 +380,7 @@ class RoomService:
                     "alias": participant["alias"],
                     "vote": vote_value,
                     "order": order_num,
+                    "reason": clean_reason,
                     "timestamp": time.time()
                 }
                 room["votes"][voter_key] = vote_value
@@ -386,6 +389,7 @@ class RoomService:
             tally = self._calculate_question_tally_unlocked(room, curr_q)
             return {
                 "vote": vote_value,
+                "reason": clean_reason if vote_value is not None else None,
                 "order": order_num,
                 "tally": tally,
                 "hasVoted": participant["hasVoted"],
@@ -627,12 +631,14 @@ class RoomService:
             
             curr_q = room.get("currentQuestion")
             user_vote = None
+            user_reason = None
             has_voted = False
 
             if curr_q:
                 vote_info = curr_q.get("votes", {}).get(voter_key)
                 if vote_info:
                     user_vote = vote_info["vote"] if isinstance(vote_info, dict) else vote_info
+                    user_reason = vote_info.get("reason", "") if isinstance(vote_info, dict) else None
                     has_voted = True
 
             curr_q_data = None
@@ -661,6 +667,7 @@ class RoomService:
                 "currentQuestion": curr_q_data,
                 "hasVoted": has_voted,
                 "myVote": user_vote,
+                "myReason": user_reason,
                 "strikes": participant.get("strikes", 0) if participant else 0,
                 "disqualified": participant.get("disqualified", False) if participant else False,
                 "alias": participant.get("alias") if participant else None,

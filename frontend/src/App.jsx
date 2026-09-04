@@ -58,16 +58,6 @@ function AppContent() {
     }
   }, [location.search]);
 
-  // If user is on "/" but already has an active voter session that hasn't been exited
-  useEffect(() => {
-    if (location.pathname === '/') {
-      const activeVoter = getActiveVoterRoom();
-      const params = new URLSearchParams(location.search);
-      if (activeVoter && !params.get('room')) {
-        navigate(`/vote/${activeVoter}`, { replace: true });
-      }
-    }
-  }, [location.pathname, location.search, navigate]);
 
   // Sync voterState updates to cached localStorage
   useEffect(() => {
@@ -235,7 +225,8 @@ function AppContent() {
         setVoterState((prev) => ({
           ...prev,
           hasVoted: true,
-          myVote: data.vote
+          myVote: data.vote,
+          myReason: data.reason || null
         }));
       }
     }
@@ -439,12 +430,13 @@ function AppContent() {
     });
   };
 
-  const handleSubmitVote = (voteVal) => {
+  const handleSubmitVote = (voteVal, reason = '') => {
     if (!voterState.roomId) return;
     const voterSessionId = getVoterSessionId();
     socket.emit('submit_vote', {
       roomId: voterState.roomId,
       vote: voteVal,
+      reason: (reason || '').trim(),
       voterSessionId
     });
   };
@@ -489,23 +481,35 @@ function AppContent() {
     socket.emit('kick_participant', { roomId: hostRoom.id, socketId });
   };
 
-  const handleHostExit = () => {
-    if (hostRoom) {
-      socket.emit('host_leave_room', { roomId: hostRoom.id });
-      clearHostSession(hostRoom.id);
+  const handleHostExit = (targetRoomId = null) => {
+    const pathRoom = window.location.pathname.startsWith('/host/')
+      ? window.location.pathname.split('/host/')[1]?.split('/')[0]?.split('?')[0]
+      : null;
+    const rId = targetRoomId || (hostRoom ? hostRoom.id : null) || pathRoom;
+    if (rId) {
+      socket.emit('host_leave_room', { roomId: rId });
+      clearHostSession(rId);
     }
     setHostRoom(null);
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
-  const handleVoterExit = () => {
-    if (voterState.roomId) {
-      const voterSessionId = getVoterSessionId();
-      socket.emit('voter_leave_room', { roomId: voterState.roomId, voterSessionId });
-      clearVoterSession(voterState.roomId);
+  const handleVoterExit = (targetRoomId = null) => {
+    const pathRoom = window.location.pathname.startsWith('/vote/') 
+      ? window.location.pathname.split('/vote/')[1]?.split('/')[0]?.split('?')[0] 
+      : null;
+    const rId = targetRoomId || (voterState ? voterState.roomId : null) || pathRoom || getActiveVoterRoom();
+    const voterSessionId = getVoterSessionId();
+
+    if (rId) {
+      socket.emit('voter_leave_room', { roomId: rId, voterSessionId });
+      clearVoterSession(rId);
     } else {
       clearVoterSession(null);
     }
+
+    setActiveVoterRoom(null);
+
     setVoterState({
       roomId: null,
       title: '',
@@ -520,7 +524,8 @@ function AppContent() {
       alias: '',
       tally: null
     });
-    navigate('/');
+
+    navigate('/', { replace: true });
   };
 
   return (
@@ -711,7 +716,7 @@ function HostRouteWrapper({
       onUpdateTitle={onUpdateTitle}
       onEndPoll={onEndPoll}
       onKickParticipant={onKickParticipant}
-      onLeave={onLeave}
+      onLeave={() => onLeave(roomId)}
     />
   );
 }
@@ -726,6 +731,16 @@ function VoterRouteWrapper({
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Only attempt to rejoin if a session for this room actually exists in storage
+    const cachedState = getCachedVoterState(roomId);
+    const activeRoom = getActiveVoterRoom();
+
+    if (!cachedState && String(activeRoom) !== String(roomId)) {
+      // Session has been cleared/exited; do not rejoin, navigate home
+      navigate('/', { replace: true });
+      return;
+    }
+
     if (!voterState.roomId || String(voterState.roomId) !== String(roomId)) {
       const voterSessionId = getVoterSessionId();
       setActiveVoterRoom(roomId);
@@ -743,7 +758,7 @@ function VoterRouteWrapper({
         };
       }
     }
-  }, [voterState.roomId, roomId]);
+  }, [voterState.roomId, roomId, navigate]);
 
   const effectiveVoterState = (voterState && voterState.roomId) ? voterState : getCachedVoterState(roomId);
 
@@ -759,7 +774,7 @@ function VoterRouteWrapper({
     <VoterView
       voterState={effectiveVoterState}
       onSubmitVote={onSubmitVote}
-      onLeave={onLeave}
+      onLeave={() => onLeave(roomId)}
     />
   );
 }

@@ -9,8 +9,9 @@ export default function VoterView({
 }) {
   const [ratingScore, setRatingScore] = useState(5);
   const [receiptHash, setReceiptHash] = useState('');
+  const [voteReason, setVoteReason] = useState('');
 
-  // Reset or regenerate unique receipt hash upon voting each question
+  // Reset or regenerate unique receipt hash and reason upon voting each question
   useEffect(() => {
     if (voterState.hasVoted && !receiptHash) {
       const hash = 'VS-' + Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -22,20 +23,21 @@ export default function VoterView({
       });
     } else if (!voterState.hasVoted) {
       setReceiptHash('');
+      setVoteReason('');
     }
   }, [voterState.hasVoted, voterState.currentQuestion?.id]);
 
   const handleAssemblyVote = (choice) => {
     if (voterState.currentQuestion?.status === 'closed') return;
     if (navigator.vibrate) navigator.vibrate(50);
-    onSubmitVote(choice);
+    onSubmitVote(choice, voteReason);
   };
 
   const handleRatingSubmit = (e) => {
     e.preventDefault();
     if (voterState.currentQuestion?.status === 'closed') return;
     if (navigator.vibrate) navigator.vibrate(50);
-    onSubmitVote(ratingScore);
+    onSubmitVote(ratingScore, voteReason);
   };
 
   const getRatingTag = (val) => {
@@ -258,6 +260,14 @@ export default function VoterView({
                       </strong>
                     </div>
                   )}
+                  {(voterState.myReason || voteReason) && (
+                    <div className="receipt-row">
+                      <span>Reason:</span>
+                      <strong style={{ color: '#67e8f9', fontStyle: 'italic', fontWeight: 600, maxWidth: '240px', textAlign: 'right', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        "{voterState.myReason || voteReason}"
+                      </strong>
+                    </div>
+                  )}
                   <div className="receipt-row">
                     <span>Receipt Hash:</span>
                     <code id="receiptCode">{receiptHash || 'VS-CONFIRMED'}</code>
@@ -274,7 +284,10 @@ export default function VoterView({
                     type="button"
                     className="btn btn-outline btn-sm"
                     style={{ marginTop: '16px' }}
-                    onClick={() => onSubmitVote(null)}
+                    onClick={() => {
+                      setVoteReason(voterState.myReason || '');
+                      onSubmitVote(null);
+                    }}
                   >
                     Change My Vote
                   </button>
@@ -284,100 +297,149 @@ export default function VoterView({
               <>
                 {/* Option A: Assembly Mode Voting Grid */}
                 {isAssembly && !isClosed && (
-                  <div id="assemblyOptionsContainer" className="assembly-grid">
-                    <button 
-                      type="button"
-                      className="vote-card card-yes" 
-                      onClick={() => handleAssemblyVote('Yes')}
-                    >
-                      <span className="vote-card-icon">👍</span>
-                      <span className="vote-card-label">YES</span>
-                      <span className="vote-card-desc">Support / In Favor</span>
-                    </button>
+                  <div className="assembly-view-container">
+                    {/* Optional Reason Text Box */}
+                    <div className="voter-reason-box">
+                      <div className="voter-reason-wrapper">
+                        <span className="voter-reason-icon">💬</span>
+                        <input
+                          type="text"
+                          id="voterReasonInput"
+                          className="voter-reason-input"
+                          placeholder="Reason for your choice (optional)..."
+                          value={voteReason}
+                          onChange={(e) => setVoteReason(e.target.value)}
+                          maxLength={160}
+                        />
+                        {voteReason && (
+                          <button
+                            type="button"
+                            className="voter-reason-clear-btn"
+                            onClick={() => setVoteReason('')}
+                            title="Clear reason"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                    <button 
-                      type="button"
-                      className="vote-card card-no" 
-                      onClick={() => handleAssemblyVote('No')}
-                    >
-                      <span className="vote-card-icon">👎</span>
-                      <span className="vote-card-label">NO</span>
-                      <span className="vote-card-desc">Against / Oppose</span>
-                    </button>
+                    <div id="assemblyOptionsContainer" className="assembly-grid">
+                      <button 
+                        type="button"
+                        className="vote-card card-yes" 
+                        onClick={() => handleAssemblyVote('Yes')}
+                      >
+                        <span className="vote-card-icon">👍</span>
+                        <span className="vote-card-label">YES</span>
+                        <span className="vote-card-desc">Support / In Favor</span>
+                      </button>
 
-                    <button 
-                      type="button"
-                      className="vote-card card-maybe" 
-                      onClick={() => handleAssemblyVote('Maybe')}
-                    >
-                      <span className="vote-card-icon">🤔</span>
-                      <span className="vote-card-label">MAYBE</span>
-                      <span className="vote-card-desc">Neutral / Undecided</span>
-                    </button>
+                      <button 
+                        type="button"
+                        className="vote-card card-no" 
+                        onClick={() => handleAssemblyVote('No')}
+                      >
+                        <span className="vote-card-icon">👎</span>
+                        <span className="vote-card-label">NO</span>
+                        <span className="vote-card-desc">Against / Oppose</span>
+                      </button>
 
-                    <button 
-                      type="button"
-                      className="vote-card card-nota" 
-                      onClick={() => handleAssemblyVote('NOTA')}
-                    >
-                      <span className="vote-card-icon">🚫</span>
-                      <span className="vote-card-label">NOTA</span>
-                      <span className="vote-card-desc">None of the Above</span>
-                    </button>
+                      <button 
+                        type="button"
+                        className="vote-card card-maybe" 
+                        onClick={() => handleAssemblyVote('Maybe')}
+                      >
+                        <span className="vote-card-icon">🤔</span>
+                        <span className="vote-card-label">MAYBE</span>
+                        <span className="vote-card-desc">Neutral / Undecided</span>
+                      </button>
+
+                      <button 
+                        type="button"
+                        className="vote-card card-nota" 
+                        onClick={() => handleAssemblyVote('NOTA')}
+                      >
+                        <span className="vote-card-icon">🚫</span>
+                        <span className="vote-card-label">NOTA</span>
+                        <span className="vote-card-desc">None of the Above</span>
+                      </button>
+                    </div>
                   </div>
                 )}
 
                 {/* Option B: Rating Mode 1-10 Scale */}
                 {!isAssembly && !isClosed && (
-                  <div id="ratingScaleContainer" className="rating-container glass-card">
-                    <div className="rating-score-display">
-                      <span className="rating-number-huge" id="ratingScoreNumber">{ratingScore}</span>
-                      <span className="rating-max-label">/ 10</span>
+                  <div className="rating-view-wrapper">
+                    {/* Optional Reason Text Box on top of Rating */}
+                    <div className="voter-reason-box">
+                      <div className="voter-reason-wrapper">
+                        <span className="voter-reason-icon">💬</span>
+                        <input
+                          type="text"
+                          id="ratingReasonInput"
+                          className="voter-reason-input"
+                          placeholder="Reason for your rating (optional)..."
+                          value={voteReason}
+                          onChange={(e) => setVoteReason(e.target.value)}
+                          maxLength={160}
+                        />
+                        {voteReason && (
+                          <button
+                            type="button"
+                            className="voter-reason-clear-btn"
+                            onClick={() => setVoteReason('')}
+                            title="Clear reason"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
                     </div>
 
-                    <div className="rating-tag" id="ratingTagLabel">{getRatingTag(ratingScore)}</div>
+                    <div id="ratingScaleContainer" className="rating-container glass-card">
+                      {/* 2-Column Layout: Column 1 (5 * 2 Grid) | Column 2 (Average / Score) */}
+                      <div className="rating-two-col-layout">
+                        {/* Column 1: 1-10 Quick Select Buttons in 5 * 2 Grid */}
+                        <div className="rating-col-buttons">
+                          <div className="rating-buttons-grid" id="ratingButtonsGrid">
+                            {Array.from({ length: 10 }, (_, i) => i + 1).map((val) => (
+                              <button
+                                key={val}
+                                type="button"
+                                className={`rating-tile ${ratingScore === val ? 'active-tile' : ''}`}
+                                onClick={() => setRatingScore(val)}
+                              >
+                                {val}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
 
-                    {/* Quick Select 1-10 Buttons */}
-                    <div className="rating-buttons-grid" id="ratingButtonsGrid">
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((val) => (
-                        <button
-                          key={val}
-                          type="button"
-                          className={`rating-tile ${ratingScore === val ? 'active-tile' : ''}`}
-                          onClick={() => setRatingScore(val)}
-                        >
-                          {val}
-                        </button>
-                      ))}
+                        {/* Column 2: Average Score & Tag Description */}
+                        <div className="rating-col-average">
+                          <div className="rating-side-score-box">
+                            <div className="rating-compact-score">
+                              <span className="rating-compact-number" id="ratingScoreNumber">{ratingScore}</span>
+                              <span className="rating-compact-max">/ 10</span>
+                            </div>
+                            <div className="rating-tag" id="ratingTagLabel">{getRatingTag(ratingScore)}</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <button 
+                        type="button" 
+                        className="btn btn-emerald btn-block" 
+                        id="submitRatingBtn"
+                        onClick={handleRatingSubmit}
+                      >
+                        <span>Submit Rating Score</span>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      </button>
                     </div>
-
-                    {/* Range Slider */}
-                    <input
-                      type="range"
-                      className="custom-range-slider"
-                      id="ratingSlider"
-                      min="1"
-                      max="10"
-                      value={ratingScore}
-                      onChange={(e) => setRatingScore(parseInt(e.target.value))}
-                    />
-                    <div className="slider-marks">
-                      <span>1 (Poor)</span>
-                      <span>5 (Average)</span>
-                      <span>10 (Masterpiece)</span>
-                    </div>
-
-                    <button 
-                      type="button" 
-                      className="btn btn-emerald btn-block" 
-                      id="submitRatingBtn"
-                      onClick={handleRatingSubmit}
-                    >
-                      <span>Submit Rating Score</span>
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                        <polyline points="9 18 15 12 9 6" />
-                      </svg>
-                    </button>
                   </div>
                 )}
               </>

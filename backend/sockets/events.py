@@ -126,10 +126,13 @@ def register_socket_events(socketio):
 
     @socketio.on("voter_leave_room")
     def handle_voter_leave_room(data):
-        room_id = (data or {}).get("roomId")
+        data = data or {}
+        room_id = data.get("roomId")
+        session_id = data.get("voterSessionId") or data.get("sessionId")
         socket_id = request.sid
         if room_id:
-            new_tally = room_service.remove_participant(room_id, socket_id, force=True)
+            ident = session_id if (session_id and str(session_id).strip()) else socket_id
+            new_tally = room_service.remove_participant(room_id, ident, force=True)
             leave_room(f"room_{room_id}")
             host_state = room_service.get_host_state(room_id)
             if host_state:
@@ -305,11 +308,12 @@ def register_socket_events(socketio):
         data = data or {}
         room_id = data.get("roomId")
         vote_value = data.get("vote")
+        reason = data.get("reason", "")
         session_id = data.get("voterSessionId") or data.get("sessionId")
         socket_id = request.sid
 
         try:
-            result = room_service.submit_vote(room_id, socket_id, vote_value, session_id=session_id)
+            result = room_service.submit_vote(room_id, socket_id, vote_value, session_id=session_id, reason=reason)
             
             # Confirm to voter across all connected sockets/tabs for this voter
             participant = result.get("participant", {})
@@ -318,6 +322,7 @@ def register_socket_events(socketio):
                 socketio.emit("vote_confirmed", {
                     "success": True,
                     "vote": result["vote"],
+                    "reason": result.get("reason"),
                     "order": result.get("order"),
                     "questionId": result.get("questionId")
                 }, to=sid)
@@ -458,24 +463,6 @@ def register_socket_events(socketio):
                     "isRevealed": host_state["isRevealed"]
                 }, to=f"room_{room_id}")
 
-    @socketio.on("voter_leave_room")
-    def handle_voter_leave_room(data):
-        data = data or {}
-        room_id = data.get("roomId")
-        socket_id = request.sid
-        if room_id:
-            new_tally = room_service.remove_participant(room_id, socket_id, force=True)
-            host_state = room_service.get_host_state(room_id)
-            if host_state:
-                socketio.emit("roster_updated", {
-                    "participants": host_state["participants"],
-                    "participantCount": host_state["participantCount"]
-                }, to=f"room_{room_id}")
-                socketio.emit("tally_updated", {
-                    "tally": new_tally,
-                    "participants": host_state["participants"],
-                    "isRevealed": host_state["isRevealed"]
-                }, to=f"room_{room_id}")
 
     @socketio.on("disconnect")
     def handle_disconnect():
