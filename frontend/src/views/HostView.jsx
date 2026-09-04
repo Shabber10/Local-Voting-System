@@ -389,9 +389,13 @@ export default function HostView({
                   <div
                     className={`cred-value pin-highlight ${isRoomLocked ? 'pin-highlight-locked' : ''}`}
                     id="hostPasscodeDisplay"
-                    style={isRoomLocked ? { letterSpacing: '4px', opacity: 0.85 } : {}}
+                    style={{
+                      whiteSpace: 'nowrap',
+                      letterSpacing: isRoomLocked ? '3px' : '2px',
+                      opacity: isRoomLocked ? 0.85 : 1
+                    }}
                   >
-                    {isRoomLocked ? '- - - -' : (room.passcode || '----')}
+                    {isRoomLocked ? '----' : (room.passcode || '----')}
                   </div>
                   {/* Circular Countdown Timer */}
                   <div className="timer-ring-container">

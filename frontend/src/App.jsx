@@ -25,6 +25,9 @@ function AppContent() {
   const [createError, setCreateError] = useState(null);
   const [joinError, setJoinError] = useState(null);
 
+  // In-app alert / notice modal state (replaces browser native alert/confirm)
+  const [popupModal, setPopupModal] = useState(null);
+
   // Host state
   const [hostRoom, setHostRoom] = useState(null);
   const [hostKey, setHostKey] = useState(null);
@@ -55,16 +58,6 @@ function AppContent() {
     }
   }, [location.search]);
 
-  // If user is on "/" but already has an active voter session that hasn't been exited
-  useEffect(() => {
-    if (location.pathname === '/') {
-      const activeVoter = getActiveVoterRoom();
-      const params = new URLSearchParams(location.search);
-      if (activeVoter && !params.get('room')) {
-        navigate(`/vote/${activeVoter}`, { replace: true });
-      }
-    }
-  }, [location.pathname, location.search, navigate]);
 
   // Sync voterState updates to cached localStorage
   useEffect(() => {
@@ -232,7 +225,8 @@ function AppContent() {
         setVoterState((prev) => ({
           ...prev,
           hasVoted: true,
-          myVote: data.vote
+          myVote: data.vote,
+          myReason: data.reason || null
         }));
       }
     }
@@ -274,8 +268,16 @@ function AppContent() {
     function onRoomClosed(data) {
       // ONLY notify voters who were actively in this room
       if (voterState.roomId === data.roomId) {
-        alert(`Room #${data.roomId} has been closed by the host.`);
-        handleVoterExit();
+        setPopupModal({
+          title: 'Room Closed',
+          message: `Room #${data.roomId} has been closed by the host.`,
+          icon: '🔒',
+          confirmLabel: 'OK',
+          confirmType: 'primary',
+          onConfirm: () => {
+            handleVoterExit();
+          }
+        });
       }
     }
 
@@ -329,8 +331,16 @@ function AppContent() {
     }
 
     function onKicked(data) {
-      alert(data?.message || 'You have been removed from this voting session.');
-      handleVoterExit();
+      setPopupModal({
+        title: 'Session Disqualification',
+        message: data?.message || 'You have been disqualified by the host.',
+        icon: '⛔',
+        confirmLabel: 'OK',
+        confirmType: 'danger',
+        onConfirm: () => {
+          handleVoterExit();
+        }
+      });
     }
 
     socket.on('connect', onConnect);
@@ -420,12 +430,13 @@ function AppContent() {
     });
   };
 
-  const handleSubmitVote = (voteVal) => {
+  const handleSubmitVote = (voteVal, reason = '') => {
     if (!voterState.roomId) return;
     const voterSessionId = getVoterSessionId();
     socket.emit('submit_vote', {
       roomId: voterState.roomId,
       vote: voteVal,
+      reason: (reason || '').trim(),
       voterSessionId
     });
   };
@@ -452,9 +463,17 @@ function AppContent() {
 
   const handleEndPoll = () => {
     if (!hostRoom) return;
-    if (window.confirm('Conclude the voting session?')) {
-      socket.emit('host_end_poll', { roomId: hostRoom.id });
-    }
+    setPopupModal({
+      title: 'End Session?',
+      message: 'Are you sure you want to conclude this live voting session?',
+      icon: '🏁',
+      confirmLabel: 'Conclude Session',
+      cancelLabel: 'Cancel',
+      confirmType: 'danger',
+      onConfirm: () => {
+        socket.emit('host_end_poll', { roomId: hostRoom.id });
+      }
+    });
   };
 
   const handleKickParticipant = (socketId) => {
@@ -462,23 +481,35 @@ function AppContent() {
     socket.emit('kick_participant', { roomId: hostRoom.id, socketId });
   };
 
-  const handleHostExit = () => {
-    if (hostRoom) {
-      socket.emit('host_leave_room', { roomId: hostRoom.id });
-      clearHostSession(hostRoom.id);
+  const handleHostExit = (targetRoomId = null) => {
+    const pathRoom = window.location.pathname.startsWith('/host/')
+      ? window.location.pathname.split('/host/')[1]?.split('/')[0]?.split('?')[0]
+      : null;
+    const rId = targetRoomId || (hostRoom ? hostRoom.id : null) || pathRoom;
+    if (rId) {
+      socket.emit('host_leave_room', { roomId: rId });
+      clearHostSession(rId);
     }
     setHostRoom(null);
-    navigate('/');
+    navigate('/', { replace: true });
   };
 
-  const handleVoterExit = () => {
-    if (voterState.roomId) {
-      const voterSessionId = getVoterSessionId();
-      socket.emit('voter_leave_room', { roomId: voterState.roomId, voterSessionId });
-      clearVoterSession(voterState.roomId);
+  const handleVoterExit = (targetRoomId = null) => {
+    const pathRoom = window.location.pathname.startsWith('/vote/') 
+      ? window.location.pathname.split('/vote/')[1]?.split('/')[0]?.split('?')[0] 
+      : null;
+    const rId = targetRoomId || (voterState ? voterState.roomId : null) || pathRoom || getActiveVoterRoom();
+    const voterSessionId = getVoterSessionId();
+
+    if (rId) {
+      socket.emit('voter_leave_room', { roomId: rId, voterSessionId });
+      clearVoterSession(rId);
     } else {
       clearVoterSession(null);
     }
+
+    setActiveVoterRoom(null);
+
     setVoterState({
       roomId: null,
       title: '',
@@ -493,72 +524,131 @@ function AppContent() {
       alias: '',
       tally: null
     });
-    navigate('/');
+
+    navigate('/', { replace: true });
   };
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <LandingView
-            onJoinRoom={handleJoinRoom}
-            onCreateRoom={handleCreateRoom}
-            initialRoom={urlParams.room}
-            initialPin={urlParams.pin}
-            isConnecting={isConnecting}
-            createError={createError}
-            joinError={joinError}
-            onClearErrors={handleClearErrors}
-          />
-        }
-      />
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingView
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              initialRoom={urlParams.room}
+              initialPin={urlParams.pin}
+              isConnecting={isConnecting}
+              createError={createError}
+              joinError={joinError}
+              onClearErrors={handleClearErrors}
+            />
+          }
+        />
 
-      <Route
-        path="/host/:roomId"
-        element={
-          <HostRouteWrapper
-            hostRoom={hostRoom}
-            onLaunchQuestion={handleLaunchQuestion}
-            onCloseQuestion={handleCloseQuestion}
-            onEraseSessionData={handleEraseSessionData}
-            onToggleLock={handleToggleLock}
-            onToggleReveal={handleToggleReveal}
-            onResetVotes={handleResetVotes}
-            onUpdateTitle={handleUpdateTitle}
-            onEndPoll={handleEndPoll}
-            onKickParticipant={handleKickParticipant}
-            onLeave={handleHostExit}
-          />
-        }
-      />
+        <Route
+          path="/host/:roomId"
+          element={
+            <HostRouteWrapper
+              hostRoom={hostRoom}
+              onLaunchQuestion={handleLaunchQuestion}
+              onCloseQuestion={handleCloseQuestion}
+              onEraseSessionData={handleEraseSessionData}
+              onToggleLock={handleToggleLock}
+              onToggleReveal={handleToggleReveal}
+              onResetVotes={handleResetVotes}
+              onUpdateTitle={handleUpdateTitle}
+              onEndPoll={handleEndPoll}
+              onKickParticipant={handleKickParticipant}
+              onLeave={handleHostExit}
+            />
+          }
+        />
 
-      <Route
-        path="/vote/:roomId"
-        element={
-          <VoterRouteWrapper
-            voterState={voterState}
-            onSubmitVote={handleSubmitVote}
-            onLeave={handleVoterExit}
-          />
-        }
-      />
+        <Route
+          path="/vote/:roomId"
+          element={
+            <VoterRouteWrapper
+              voterState={voterState}
+              onSubmitVote={handleSubmitVote}
+              onLeave={handleVoterExit}
+            />
+          }
+        />
 
-      {/* Fallback */}
-      <Route
-        path="*"
-        element={
-          <LandingView
-            onJoinRoom={handleJoinRoom}
-            onCreateRoom={handleCreateRoom}
-            isConnecting={isConnecting}
-            createError={createError}
-            joinError={joinError}
-            onClearErrors={handleClearErrors}
-          />
-        }
-      />
-    </Routes>
+        {/* Fallback */}
+        <Route
+          path="*"
+          element={
+            <LandingView
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              isConnecting={isConnecting}
+              createError={createError}
+              joinError={joinError}
+              onClearErrors={handleClearErrors}
+            />
+          }
+        />
+      </Routes>
+
+      {/* Universal In-App Alert / Confirmation Modal (replaces browser native dialogs) */}
+      <div 
+        className={`modal-backdrop ${popupModal ? 'open' : ''}`}
+        id="appPopupModalBackdrop"
+        style={{ zIndex: 99999 }}
+      >
+        <div 
+          className="modal-dialog glass-card"
+          style={{ 
+            maxWidth: 420, 
+            textAlign: 'center', 
+            padding: '28px 24px'
+          }}
+        >
+          <div style={{ fontSize: '2.8rem', marginBottom: '12px' }}>
+            {popupModal?.icon || '⚠️'}
+          </div>
+
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff', margin: '0 0 8px 0' }}>
+            {popupModal?.title || 'Notice'}
+          </h3>
+
+          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 22px 0' }}>
+            {popupModal?.message}
+          </p>
+
+          <div style={{ display: popupModal?.cancelLabel ? 'grid' : 'block', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {popupModal?.cancelLabel && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  if (popupModal?.onCancel) popupModal.onCancel();
+                  setPopupModal(null);
+                }}
+                style={{ height: '44px', fontSize: '0.9rem', fontWeight: 800 }}
+              >
+                {popupModal.cancelLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`btn ${popupModal?.confirmType === 'danger' ? 'btn-danger' : 'btn-primary'} ${!popupModal?.cancelLabel ? 'btn-block' : ''}`}
+              onClick={() => {
+                const cb = popupModal?.onConfirm;
+                setPopupModal(null);
+                if (cb) cb();
+              }}
+              style={{ height: '44px', fontSize: '0.92rem', fontWeight: 800 }}
+            >
+              {popupModal?.confirmLabel || 'OK'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -626,7 +716,7 @@ function HostRouteWrapper({
       onUpdateTitle={onUpdateTitle}
       onEndPoll={onEndPoll}
       onKickParticipant={onKickParticipant}
-      onLeave={onLeave}
+      onLeave={() => onLeave(roomId)}
     />
   );
 }
@@ -641,6 +731,16 @@ function VoterRouteWrapper({
   const navigate = useNavigate();
 
   useEffect(() => {
+    // Only attempt to rejoin if a session for this room actually exists in storage
+    const cachedState = getCachedVoterState(roomId);
+    const activeRoom = getActiveVoterRoom();
+
+    if (!cachedState && String(activeRoom) !== String(roomId)) {
+      // Session has been cleared/exited; do not rejoin, navigate home
+      navigate('/', { replace: true });
+      return;
+    }
+
     if (!voterState.roomId || String(voterState.roomId) !== String(roomId)) {
       const voterSessionId = getVoterSessionId();
       setActiveVoterRoom(roomId);
@@ -658,7 +758,7 @@ function VoterRouteWrapper({
         };
       }
     }
-  }, [voterState.roomId, roomId]);
+  }, [voterState.roomId, roomId, navigate]);
 
   const effectiveVoterState = (voterState && voterState.roomId) ? voterState : getCachedVoterState(roomId);
 
@@ -674,7 +774,7 @@ function VoterRouteWrapper({
     <VoterView
       voterState={effectiveVoterState}
       onSubmitVote={onSubmitVote}
-      onLeave={onLeave}
+      onLeave={() => onLeave(roomId)}
     />
   );
 }
