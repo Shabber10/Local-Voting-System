@@ -15,8 +15,8 @@
     0 1px 0 rgba(255, 255, 255, 0.2),
     0 8px 30px rgba(4, 26, 42, 0.5),
     0 2px 20px rgba(6, 182, 212, 0.25);
-  padding: clamp(18px, 2.4vw, 24px) clamp(18px, 3.5vw, 36px);
-  min-height: 76px;
+  padding: 10px clamp(16px, 2.5vw, 32px);
+  min-height: 56px;
   display: flex;
   align-items: center;
   transition: all 0.3s ease;
@@ -49,14 +49,14 @@
 }
 
 .logo-icon-wrap {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, rgba(6, 182, 212, 0.35) 0%, rgba(16, 185, 129, 0.25) 100%);
   border: 1.5px solid rgba(45, 212, 191, 0.6);
-  border-radius: 14px;
+  border-radius: 11px;
   box-shadow: 
     inset 0 1.5px 2px rgba(255, 255, 255, 0.4),
     inset 0 -1.5px 3px rgba(4, 26, 42, 0.5),
@@ -72,13 +72,13 @@
 }
 
 .logo-svg {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   filter: drop-shadow(0 0 8px rgba(34, 211, 238, 0.7));
 }
 
 .logo-text h1 {
-  font-size: clamp(1.2rem, 2.5vw, 1.45rem);
+  font-size: clamp(1.1rem, 2vw, 1.3rem);
   font-weight: 900;
   letter-spacing: -0.5px;
   background: linear-gradient(135deg, #ffffff 25%, #67e8f9 70%, #34d399 100%);
@@ -89,7 +89,7 @@
 }
 
 .tagline {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #bae6fd;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -162,12 +162,12 @@
 .nav-session-timer-pill {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 18px;
+  gap: 7px;
+  padding: 5px 14px;
   border-radius: var(--radius-pill);
-  font-size: 0.92rem;
+  font-size: 0.85rem;
   font-weight: 900;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Plus Jakarta Sans', sans-serif;
   letter-spacing: 0.5px;
   color: #ffffff;
   transition: all var(--transition-smooth);
@@ -244,13 +244,13 @@
 .nav-exit-btn {
   display: flex;
   align-items: center;
-  gap: 7px;
-  padding: 7px 20px;
+  gap: 6px;
+  padding: 5px 15px;
   border-radius: var(--radius-pill);
   background: linear-gradient(135deg, #ef4444 0%, #dc2626 50%, #b91c1c 100%);
   border: 1.5px solid rgba(254, 205, 211, 0.7);
   color: #ffffff;
-  font-size: 0.86rem;
+  font-size: 0.82rem;
   font-weight: 800;
   cursor: pointer;
   transition: all var(--transition-fast);

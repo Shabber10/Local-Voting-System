@@ -392,11 +392,9 @@ function AppContent() {
 
   const handleEraseSessionData = () => {
     if (!hostRoom) return;
-    if (window.confirm('Are you sure you want to erase all temporary session data and question history?')) {
-      socket.emit('host_erase_session_data', {
-        roomId: hostRoom.id
-      });
-    }
+    socket.emit('host_erase_session_data', {
+      roomId: hostRoom.id
+    });
   };
 
   const handleSubmitVote = (voteVal) => {
@@ -421,9 +419,7 @@ function AppContent() {
 
   const handleResetVotes = () => {
     if (!hostRoom) return;
-    if (window.confirm('Reset all participant votes to zero?')) {
-      socket.emit('host_reset_votes', { roomId: hostRoom.id });
-    }
+    socket.emit('host_reset_votes', { roomId: hostRoom.id });
   };
 
   const handleUpdateTitle = (title) => {
