@@ -5,6 +5,9 @@ import {
   getVoterSessionId, 
   setActiveVoterRoom, 
   getActiveVoterRoom,
+  saveVoterState,
+  getCachedVoterState,
+  clearVoterSession,
   saveHostSession,
   getHostSessionKey,
   getCachedHostRoom,
@@ -52,6 +55,24 @@ function AppContent() {
     }
   }, [location.search]);
 
+  // If user is on "/" but already has an active voter session that hasn't been exited
+  useEffect(() => {
+    if (location.pathname === '/') {
+      const activeVoter = getActiveVoterRoom();
+      const params = new URLSearchParams(location.search);
+      if (activeVoter && !params.get('room')) {
+        navigate(`/vote/${activeVoter}`, { replace: true });
+      }
+    }
+  }, [location.pathname, location.search, navigate]);
+
+  // Sync voterState updates to cached localStorage
+  useEffect(() => {
+    if (voterState && voterState.roomId) {
+      saveVoterState(voterState.roomId, voterState);
+    }
+  }, [voterState]);
+
   // Socket event listeners
   useEffect(() => {
     function onConnect() {
@@ -81,6 +102,7 @@ function AppContent() {
       setIsConnecting(false);
       if (res.success) {
         setActiveVoterRoom(res.state.roomId);
+        saveVoterState(res.state.roomId, res.state);
         setVoterState({
           ...res.state,
           roomId: String(res.state.roomId),
@@ -92,7 +114,8 @@ function AppContent() {
       } else {
         setJoinError(res.error || 'Failed to join room');
         if (window.location.pathname.startsWith('/vote')) {
-          setActiveVoterRoom(null);
+          const pathRoomId = window.location.pathname.split('/').pop();
+          clearVoterSession(pathRoomId);
           navigate('/');
         }
       }
@@ -452,8 +475,10 @@ function AppContent() {
     if (voterState.roomId) {
       const voterSessionId = getVoterSessionId();
       socket.emit('voter_leave_room', { roomId: voterState.roomId, voterSessionId });
+      clearVoterSession(voterState.roomId);
+    } else {
+      clearVoterSession(null);
     }
-    setActiveVoterRoom(null);
     setVoterState({
       roomId: null,
       title: '',
@@ -617,29 +642,27 @@ function VoterRouteWrapper({
 
   useEffect(() => {
     if (!voterState.roomId || String(voterState.roomId) !== String(roomId)) {
-      const activeRoom = getActiveVoterRoom();
       const voterSessionId = getVoterSessionId();
-      if (activeRoom && String(activeRoom) === String(roomId) && voterSessionId) {
-        const attemptRejoin = () => {
-          socket.emit('rejoin_room', { roomId, voterSessionId });
-        };
-        if (socket.connected) {
-          attemptRejoin();
-        } else {
-          socket.once('connect', attemptRejoin);
-          const timer = setTimeout(attemptRejoin, 250);
-          return () => {
-            socket.off('connect', attemptRejoin);
-            clearTimeout(timer);
-          };
-        }
+      setActiveVoterRoom(roomId);
+      const attemptRejoin = () => {
+        socket.emit('rejoin_room', { roomId, voterSessionId });
+      };
+      if (socket.connected) {
+        attemptRejoin();
       } else {
-        navigate(`/?room=${roomId}`);
+        socket.once('connect', attemptRejoin);
+        const timer = setTimeout(attemptRejoin, 250);
+        return () => {
+          socket.off('connect', attemptRejoin);
+          clearTimeout(timer);
+        };
       }
     }
-  }, [voterState.roomId, roomId, navigate]);
+  }, [voterState.roomId, roomId]);
 
-  if (!voterState.roomId) {
+  const effectiveVoterState = (voterState && voterState.roomId) ? voterState : getCachedVoterState(roomId);
+
+  if (!effectiveVoterState || !effectiveVoterState.roomId) {
     return (
       <div style={{ textAlign: 'center', padding: '100px 20px', color: 'var(--text-secondary)' }}>
         <h2>Connecting to voting booth...</h2>
@@ -649,7 +672,7 @@ function VoterRouteWrapper({
 
   return (
     <VoterView
-      voterState={voterState}
+      voterState={effectiveVoterState}
       onSubmitVote={onSubmitVote}
       onLeave={onLeave}
     />

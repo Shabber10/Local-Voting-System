@@ -99,3 +99,30 @@ export function getActiveVoterRoom() {
     return getCookie('votesphere_active_voter_room');
   }
 }
+
+export function saveVoterState(roomId, voterStateData) {
+  try {
+    if (roomId && voterStateData) {
+      localStorage.setItem(`voterState_${roomId}`, JSON.stringify(voterStateData));
+      setActiveVoterRoom(roomId);
+    }
+  } catch (e) {}
+}
+
+export function getCachedVoterState(roomId) {
+  try {
+    const data = localStorage.getItem(`voterState_${roomId}`);
+    return data ? JSON.parse(data) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+export function clearVoterSession(roomId) {
+  try {
+    if (roomId) {
+      localStorage.removeItem(`voterState_${roomId}`);
+    }
+    setActiveVoterRoom(null);
+  } catch (e) {}
+}

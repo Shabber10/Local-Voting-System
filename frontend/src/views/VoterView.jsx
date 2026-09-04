@@ -73,123 +73,143 @@ export default function VoterView({
       />
 
       <main className="main-content">
-        {/* Voter Status Header */}
-        <div className="glass-card voter-header-card">
-          <div className="voter-meta">
-            <div className="room-pill">
-              <span className="dot-online"></span>
-              <span>Room <strong id="voterRoomCodeDisplay">#{voterState.roomId}</strong></span>
-            </div>
-
-            <div className="user-pill">
-              <span id="voterNameDisplay">{voterState.alias || 'Voter #1'}</span>
-            </div>
-          </div>
-        </div>
-
         {/* ------------------------------------------------------------- */}
         {/* CASE 1: IDLE STANDBY BOOTH (No question presented yet) */}
         {/* ------------------------------------------------------------- */}
         {isIdle ? (
-          <div className="glass-card voter-waiting-card" style={{
-            textAlign: 'center',
-            padding: '48px 24px',
-            margin: '20px 0',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '18px'
-          }}>
-            <div style={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.05) 70%)',
-              border: '2px solid rgba(56, 189, 248, 0.5)',
+          <>
+            {/* Voter Status Header (Idle State) */}
+            <div className="glass-card voter-header-card">
+              <div className="voter-meta">
+                <div className="room-pill">
+                  <span className="dot-online"></span>
+                  <span>Room <strong id="voterRoomCodeDisplay">#{voterState.roomId}</strong></span>
+                </div>
+
+                <div className="user-pill">
+                  <span id="voterNameDisplay">{voterState.alias || 'Voter #1'}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="glass-card voter-waiting-card" style={{
+              textAlign: 'center',
+              padding: '48px 24px',
+              margin: '20px 0',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '2.4rem',
-              animation: 'pulseGlow 2.5s infinite ease-in-out'
+              gap: '18px'
             }}>
-              📡
-            </div>
-
-            <div style={{ maxWidth: 440 }}>
-              <span style={{
-                display: 'inline-block',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                background: 'rgba(56, 189, 248, 0.15)',
-                color: 'var(--accent-cyan)',
-                fontSize: '0.8rem',
-                fontWeight: 800,
-                letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-                marginBottom: '10px'
+              <div style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(56, 189, 248, 0.25) 0%, rgba(56, 189, 248, 0.05) 70%)',
+                border: '2px solid rgba(56, 189, 248, 0.5)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '2.4rem',
+                animation: 'pulseGlow 2.5s infinite ease-in-out'
               }}>
-                Booth Connected & Standby
-              </span>
-              <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '8px', color: '#fff' }}>
-                Waiting for the Host
-              </h2>
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
-                You are securely connected to Room <strong>#{voterState.roomId}</strong>. The host will launch the next question or announcement shortly.
-              </p>
-            </div>
+                📡
+              </div>
 
-            <div style={{
-              marginTop: '10px',
-              padding: '10px 16px',
-              background: 'rgba(255, 255, 255, 0.04)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-              borderRadius: 'var(--radius-md)',
-              fontSize: '0.8rem',
-              color: 'var(--text-muted)'
-            }}>
-              🛡️ <strong>Anti-Cheat Active:</strong> Please keep this window open and focused.
+              <div style={{ maxWidth: 440 }}>
+                <span style={{
+                  display: 'inline-block',
+                  padding: '4px 12px',
+                  borderRadius: '20px',
+                  background: 'rgba(56, 189, 248, 0.15)',
+                  color: 'var(--accent-cyan)',
+                  fontSize: '0.8rem',
+                  fontWeight: 800,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  marginBottom: '10px'
+                }}>
+                  Booth Connected & Standby
+                </span>
+                <h2 style={{ fontSize: '1.6rem', fontWeight: 800, marginBottom: '8px', color: '#fff' }}>
+                  Waiting for the Host
+                </h2>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: 1.5 }}>
+                  You are securely connected to Room <strong>#{voterState.roomId}</strong>. The host will launch the next question or announcement shortly.
+                </p>
+              </div>
+
+              <div style={{
+                marginTop: '10px',
+                padding: '10px 16px',
+                background: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                borderRadius: 'var(--radius-md)',
+                fontSize: '0.8rem',
+                color: 'var(--text-muted)'
+              }}>
+                🛡️ <strong>Anti-Cheat Active:</strong> Please keep this window open and focused.
+              </div>
             </div>
-          </div>
+          </>
         ) : (
           <>
             {/* ------------------------------------------------------------- */}
             {/* CASE 2: ACTIVE QUESTION / ANNOUNCEMENT PRESENTED */}
+            {/* Top Row: Question Banner on Left | Room & Voter ID on Right */}
             {/* ------------------------------------------------------------- */}
-            <div className="glass-card poll-question-banner">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{
-                  padding: '4px 10px',
-                  borderRadius: '12px',
-                  background: isMessage ? 'rgba(234, 179, 8, 0.2)' : 'rgba(56, 189, 248, 0.2)',
-                  color: isMessage ? '#fde047' : '#38bdf8',
-                  fontSize: '0.75rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase'
-                }}>
-                  {isMessage ? `📢 Announcement #${currentQ.id}` : `🗳️ Question #${currentQ.id} (${activeMode.toUpperCase()})`}
-                </span>
-                {isClosed && (
+            <div className="voter-top-row">
+              {/* Left Side: Question Banner */}
+              <div className="glass-card poll-question-banner">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                   <span style={{
-                    padding: '3px 8px',
-                    borderRadius: '10px',
-                    background: 'rgba(239, 68, 68, 0.2)',
-                    color: '#f87171',
+                    padding: '4px 10px',
+                    borderRadius: '12px',
+                    background: isMessage ? 'rgba(234, 179, 8, 0.2)' : 'rgba(56, 189, 248, 0.2)',
+                    color: isMessage ? '#fde047' : '#38bdf8',
                     fontSize: '0.75rem',
-                    fontWeight: 800
+                    fontWeight: 800,
+                    textTransform: 'uppercase'
                   }}>
-                    🔒 Closed
+                    {isMessage ? `📢 Announcement #${currentQ.id}` : `🗳️ Question #${currentQ.id} (${activeMode.toUpperCase()})`}
                   </span>
-                )}
+                  {isClosed && (
+                    <span style={{
+                      padding: '3px 8px',
+                      borderRadius: '10px',
+                      background: 'rgba(239, 68, 68, 0.2)',
+                      color: '#f87171',
+                      fontSize: '0.75rem',
+                      fontWeight: 800
+                    }}>
+                      🔒 Closed
+                    </span>
+                  )}
+                </div>
+
+                <h2 id="voterQuestionTitle" className="voter-question-text" style={{ margin: '4px 0 6px 0' }}>
+                  {currentQ.text || 'Active Prompt'}
+                </h2>
+                <p className="voter-subtext" id="voterModeSubtitle" style={{ margin: 0 }}>
+                  {isMessage 
+                    ? 'Broadcast message from host.' 
+                    : 'Cast your choice below. Your submission is 100% encrypted & anonymous.'}
+                </p>
               </div>
 
-              <h2 id="voterQuestionTitle" className="voter-question-text" style={{ margin: '6px 0 10px 0' }}>
-                {currentQ.text || 'Active Prompt'}
-              </h2>
-              <p className="voter-subtext" id="voterModeSubtitle">
-                {isMessage 
-                  ? 'Broadcast message from host.' 
-                  : 'Cast your choice below. Your submission is 100% encrypted & anonymous.'}
-              </p>
+              {/* Right Side: Room No and Voter ID Header Card */}
+              <div className="glass-card voter-header-card voter-side-meta-card">
+                <div className="voter-meta">
+                  <div className="room-pill">
+                    <span className="dot-online"></span>
+                    <span>Room <strong id="voterRoomCodeDisplay">#{voterState.roomId}</strong></span>
+                  </div>
+
+                  <div className="user-pill">
+                    <span id="voterNameDisplay">{voterState.alias || 'Voter #1'}</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Closed Question Alert */}

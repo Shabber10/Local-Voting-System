@@ -129,7 +129,7 @@ def register_socket_events(socketio):
         room_id = (data or {}).get("roomId")
         socket_id = request.sid
         if room_id:
-            new_tally = room_service.remove_participant(room_id, socket_id)
+            new_tally = room_service.remove_participant(room_id, socket_id, force=True)
             leave_room(f"room_{room_id}")
             host_state = room_service.get_host_state(room_id)
             if host_state:
