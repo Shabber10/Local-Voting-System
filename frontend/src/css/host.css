@@ -102,16 +102,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 
 .pin-highlight {
   color: #fef08a;
-  font-size: 1.5rem;
+  font-size: clamp(1.2rem, 1.6vw, 1.45rem);
   font-weight: 900;
   letter-spacing: 2px;
   line-height: 1.1;
   text-shadow: 0 0 16px rgba(251, 191, 36, 0.6);
+  white-space: nowrap !important;
+  flex-shrink: 0;
 }
 
 /* Locked Room Passcode & Timer State */
@@ -127,6 +130,8 @@
 .pin-highlight-locked {
   color: #fca5a5 !important;
   text-shadow: 0 0 14px rgba(239, 68, 68, 0.6) !important;
+  letter-spacing: 3px !important;
+  white-space: nowrap !important;
 }
 
 .timer-ring-container {

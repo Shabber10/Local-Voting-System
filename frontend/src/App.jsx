@@ -25,6 +25,9 @@ function AppContent() {
   const [createError, setCreateError] = useState(null);
   const [joinError, setJoinError] = useState(null);
 
+  // In-app alert / notice modal state (replaces browser native alert/confirm)
+  const [popupModal, setPopupModal] = useState(null);
+
   // Host state
   const [hostRoom, setHostRoom] = useState(null);
   const [hostKey, setHostKey] = useState(null);
@@ -274,8 +277,16 @@ function AppContent() {
     function onRoomClosed(data) {
       // ONLY notify voters who were actively in this room
       if (voterState.roomId === data.roomId) {
-        alert(`Room #${data.roomId} has been closed by the host.`);
-        handleVoterExit();
+        setPopupModal({
+          title: 'Room Closed',
+          message: `Room #${data.roomId} has been closed by the host.`,
+          icon: '🔒',
+          confirmLabel: 'OK',
+          confirmType: 'primary',
+          onConfirm: () => {
+            handleVoterExit();
+          }
+        });
       }
     }
 
@@ -329,8 +340,16 @@ function AppContent() {
     }
 
     function onKicked(data) {
-      alert(data?.message || 'You have been removed from this voting session.');
-      handleVoterExit();
+      setPopupModal({
+        title: 'Session Disqualification',
+        message: data?.message || 'You have been disqualified by the host.',
+        icon: '⛔',
+        confirmLabel: 'OK',
+        confirmType: 'danger',
+        onConfirm: () => {
+          handleVoterExit();
+        }
+      });
     }
 
     socket.on('connect', onConnect);
@@ -452,9 +471,17 @@ function AppContent() {
 
   const handleEndPoll = () => {
     if (!hostRoom) return;
-    if (window.confirm('Conclude the voting session?')) {
-      socket.emit('host_end_poll', { roomId: hostRoom.id });
-    }
+    setPopupModal({
+      title: 'End Session?',
+      message: 'Are you sure you want to conclude this live voting session?',
+      icon: '🏁',
+      confirmLabel: 'Conclude Session',
+      cancelLabel: 'Cancel',
+      confirmType: 'danger',
+      onConfirm: () => {
+        socket.emit('host_end_poll', { roomId: hostRoom.id });
+      }
+    });
   };
 
   const handleKickParticipant = (socketId) => {
@@ -497,68 +524,126 @@ function AppContent() {
   };
 
   return (
-    <Routes>
-      <Route
-        path="/"
-        element={
-          <LandingView
-            onJoinRoom={handleJoinRoom}
-            onCreateRoom={handleCreateRoom}
-            initialRoom={urlParams.room}
-            initialPin={urlParams.pin}
-            isConnecting={isConnecting}
-            createError={createError}
-            joinError={joinError}
-            onClearErrors={handleClearErrors}
-          />
-        }
-      />
+    <>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <LandingView
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              initialRoom={urlParams.room}
+              initialPin={urlParams.pin}
+              isConnecting={isConnecting}
+              createError={createError}
+              joinError={joinError}
+              onClearErrors={handleClearErrors}
+            />
+          }
+        />
 
-      <Route
-        path="/host/:roomId"
-        element={
-          <HostRouteWrapper
-            hostRoom={hostRoom}
-            onLaunchQuestion={handleLaunchQuestion}
-            onCloseQuestion={handleCloseQuestion}
-            onEraseSessionData={handleEraseSessionData}
-            onToggleLock={handleToggleLock}
-            onToggleReveal={handleToggleReveal}
-            onResetVotes={handleResetVotes}
-            onUpdateTitle={handleUpdateTitle}
-            onEndPoll={handleEndPoll}
-            onKickParticipant={handleKickParticipant}
-            onLeave={handleHostExit}
-          />
-        }
-      />
+        <Route
+          path="/host/:roomId"
+          element={
+            <HostRouteWrapper
+              hostRoom={hostRoom}
+              onLaunchQuestion={handleLaunchQuestion}
+              onCloseQuestion={handleCloseQuestion}
+              onEraseSessionData={handleEraseSessionData}
+              onToggleLock={handleToggleLock}
+              onToggleReveal={handleToggleReveal}
+              onResetVotes={handleResetVotes}
+              onUpdateTitle={handleUpdateTitle}
+              onEndPoll={handleEndPoll}
+              onKickParticipant={handleKickParticipant}
+              onLeave={handleHostExit}
+            />
+          }
+        />
 
-      <Route
-        path="/vote/:roomId"
-        element={
-          <VoterRouteWrapper
-            voterState={voterState}
-            onSubmitVote={handleSubmitVote}
-            onLeave={handleVoterExit}
-          />
-        }
-      />
+        <Route
+          path="/vote/:roomId"
+          element={
+            <VoterRouteWrapper
+              voterState={voterState}
+              onSubmitVote={handleSubmitVote}
+              onLeave={handleVoterExit}
+            />
+          }
+        />
 
-      {/* Fallback */}
-      <Route
-        path="*"
-        element={
-          <LandingView
-            onJoinRoom={handleJoinRoom}
-            onCreateRoom={handleCreateRoom}
-            isConnecting={isConnecting}
-            createError={createError}
-            joinError={joinError}
-            onClearErrors={handleClearErrors}
-          />
-        }
-      />
-    </Routes>
+        {/* Fallback */}
+        <Route
+          path="*"
+          element={
+            <LandingView
+              onJoinRoom={handleJoinRoom}
+              onCreateRoom={handleCreateRoom}
+              isConnecting={isConnecting}
+              createError={createError}
+              joinError={joinError}
+              onClearErrors={handleClearErrors}
+            />
+          }
+        />
+      </Routes>
+
+      {/* Universal In-App Alert / Confirmation Modal (replaces browser native dialogs) */}
+      <div 
+        className={`modal-backdrop ${popupModal ? 'open' : ''}`}
+        id="appPopupModalBackdrop"
+        style={{ zIndex: 99999 }}
+      >
+        <div 
+          className="modal-dialog glass-card"
+          style={{ 
+            maxWidth: 420, 
+            textAlign: 'center', 
+            padding: '28px 24px'
+          }}
+        >
+          <div style={{ fontSize: '2.8rem', marginBottom: '12px' }}>
+            {popupModal?.icon || '⚠️'}
+          </div>
+
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff', margin: '0 0 8px 0' }}>
+            {popupModal?.title || 'Notice'}
+          </h3>
+
+          <p style={{ fontSize: '0.92rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 22px 0' }}>
+            {popupModal?.message}
+          </p>
+
+          <div style={{ display: popupModal?.cancelLabel ? 'grid' : 'block', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            {popupModal?.cancelLabel && (
+              <button
+                type="button"
+                className="btn btn-outline"
+                onClick={() => {
+                  if (popupModal?.onCancel) popupModal.onCancel();
+                  setPopupModal(null);
+                }}
+                style={{ height: '44px', fontSize: '0.9rem', fontWeight: 800 }}
+              >
+                {popupModal.cancelLabel}
+              </button>
+            )}
+            <button
+              type="button"
+              className={`btn ${popupModal?.confirmType === 'danger' ? 'btn-danger' : 'btn-primary'} ${!popupModal?.cancelLabel ? 'btn-block' : ''}`}
+              onClick={() => {
+                const cb = popupModal?.onConfirm;
+                setPopupModal(null);
+                if (cb) cb();
+              }}
+              style={{ height: '44px', fontSize: '0.92rem', fontWeight: 800 }}
+            >
+              {popupModal?.confirmLabel || 'OK'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
