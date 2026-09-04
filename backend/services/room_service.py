@@ -176,7 +176,7 @@ class RoomService:
             return participant
 
     def remove_participant(self, room_id: str, socket_id: str, force: bool = False) -> dict | None:
-        """Removes a participant when their last socket disconnects or when explicitly kicked."""
+        """Removes a participant when explicitly kicked or left. On transient disconnect, marks disconnected."""
         with self._lock:
             clean_id = str(room_id).strip()
             room = self._rooms.get(clean_id)
@@ -194,7 +194,7 @@ class RoomService:
                 if socket_id in socket_ids:
                     socket_ids.remove(socket_id)
 
-                if force or not socket_ids:
+                if force:
                     room["participants"].pop(voter_key, None)
                     if room.get("currentQuestion"):
                         room["currentQuestion"].get("votes", {}).pop(voter_key, None)
@@ -204,6 +204,12 @@ class RoomService:
                     keys_to_del = [sid for sid, vk in room["socketToSession"].items() if vk == voter_key]
                     for sid in keys_to_del:
                         room["socketToSession"].pop(sid, None)
+                else:
+                    # Transient socket disconnect (page refresh, tab switch, temporary network drop)
+                    # Keep participant in room["participants"] and preserve their votes so they can rejoin
+                    if not socket_ids:
+                        participant["status"] = "disconnected"
+                        participant["disconnectedAt"] = time.time()
 
             return self._calculate_tally_unlocked(room)
 

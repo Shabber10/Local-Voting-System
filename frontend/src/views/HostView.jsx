@@ -22,6 +22,7 @@ export default function HostView({
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isVoterModalOpen, setIsVoterModalOpen] = useState(false);
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
+  const [confirmDialog, setConfirmDialog] = useState(null);
   const [copiedLink, setCopiedLink] = useState(false);
   const [activeTab, setActiveTab] = useState('live'); // 'live' | 'history'
 
@@ -99,169 +100,46 @@ export default function HostView({
       />
 
       <main className="main-content">
-        {/* Host Top Control Bar */}
-        <div className="host-topbar glass-card">
-          <div className="room-credentials-panel">
-            {/* 4-Digit Room Code */}
-            <div className="credential-box">
-              <span className="cred-label">ROOM CODE</span>
-              <div className="cred-value" id="hostRoomCodeDisplay">#{room.id}</div>
-            </div>
-
-            {/* Dynamic Rotating Passcode */}
-            <div className={`credential-box totp-box ${isRoomLocked ? 'totp-box-locked' : ''}`}>
-              <span className="cred-label">{isRoomLocked ? 'ROOM LOCKED' : '20s PASSCODE'}</span>
-              <div className="totp-body">
-                <div
-                  className={`cred-value pin-highlight ${isRoomLocked ? 'pin-highlight-locked' : ''}`}
-                  id="hostPasscodeDisplay"
-                  style={isRoomLocked ? { letterSpacing: '4px', opacity: 0.85 } : {}}
-                >
-                  {isRoomLocked ? '- - - -' : (room.passcode || '----')}
-                </div>
-                {/* Circular Countdown Timer */}
-                <div className="timer-ring-container">
-                  <svg className="timer-svg" width="42" height="42" viewBox="0 0 42 42">
-                    <circle
-                      className="timer-circle-bg"
-                      cx="21"
-                      cy="21"
-                      r="17"
-                      style={isRoomLocked ? { stroke: 'rgba(255, 255, 255, 0.08)' } : {}}
-                    />
-                    <circle
-                      className="timer-circle-progress"
-                      id="timerProgressCircle"
-                      cx="21"
-                      cy="21"
-                      r="17"
-                      style={{
-                        strokeDasharray: `${circumference} ${circumference}`,
-                        strokeDashoffset: progressOffset,
-                        transition: isRoomLocked ? 'none' : 'stroke-dashoffset 0.9s linear',
-                        stroke: isRoomLocked ? 'rgba(239, 68, 68, 0.4)' : undefined,
-                        opacity: isRoomLocked ? 0.25 : 1
-                      }}
-                    />
-                  </svg>
-                  <span
-                    className="timer-seconds"
-                    id="totpRemainingSec"
-                    style={isRoomLocked ? { color: '#f87171', fontSize: '1.2rem', fontWeight: 900 } : {}}
-                  >
-                    {isRoomLocked ? '-' : `${expiresIn}s`}
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Host Actions: Row 2 (3 cols) & Row 3 (3 cols) */}
-          <div className="host-actions-grid">
-            {/* Row 2: lock room | Show QR | Voters (count) */}
-            <button
-              type="button"
-              className={`btn btn-sm ${room.isLocked ? 'btn-danger' : 'btn-outline'}`}
-              onClick={() => onToggleLock(!room.isLocked)}
-              title="Lock or Unlock Room"
-            >
-              <span>{room.isLocked ? '🔒 Room Locked' : '🔓 Lock Room'}</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={() => setIsQrModalOpen(true)}
-              title="Show QR Code and Direct Join Link"
-            >
-              <span>📱 Show QR Code</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm btn-outline btn-voters-action"
-              onClick={() => setIsVoterModalOpen(true)}
-              title="View Connected Voters Roster"
-            >
-              <span>👥 Voters</span>
-              <span className="btn-badge-counter">{totalParticipants}</span>
-            </button>
-
-            {/* Row 3: Export CSV | History (count) | Erase Data */}
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={handleExportCsv}
-              title="Export complete session history to CSV"
-            >
-              <span>📥 Export CSV</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              onClick={() => setIsHistoryModalOpen(true)}
-              title="View Completed Rounds History"
-            >
-              <span>📜 History ({questionHistory.length})</span>
-            </button>
-
-            <button
-              type="button"
-              className="btn btn-sm btn-outline"
-              style={{ borderColor: 'rgba(239, 68, 68, 0.4)', color: '#fca5a5' }}
-              onClick={onEraseSessionData}
-              title="Erase all temporary session data"
-            >
-              <span>🗑️ Erase Data</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Host Grid Layout */}
-        <div className="host-grid">
-          {/* Left: Dynamic Question Composer & Live Results */}
+        <div className="host-desktop-layout">
+          {/* Left Column: Dynamic Question Composer & Live Results */}
           <div className="host-left-col">
 
             {/* 1. DYNAMIC QUESTION LAUNCHER CARD */}
             <div className="glass-card poll-control-card" style={{ marginBottom: '20px' }}>
-              <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px', marginBottom: '16px' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <h3 style={{ fontSize: '1.15rem', margin: 0, fontWeight: 900 }}>
-                    {currentQ ? `⚡ Current Question #${currentQ.id}` : `🚀 Launch Question #${nextQuestionNumber}`}
-                  </h3>
-                  <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', margin: '3px 0 0 0' }}>
+              <div className="card-header launcher-card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '14px', flexWrap: 'wrap', marginBottom: '16px' }}>
+                <div style={{ flex: '1 1 220px', minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <h3 style={{ fontSize: '1.15rem', margin: 0, fontWeight: 900 }}>
+                      {currentQ ? `⚡ Current Question #${currentQ.id}` : `🚀 Launch Question #${nextQuestionNumber}`}
+                    </h3>
+                    {currentQ && (
+                      <span style={{
+                        padding: '3px 10px',
+                        borderRadius: '20px',
+                        background: currentQ.status === 'active' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
+                        border: currentQ.status === 'active' ? '1.5px solid rgba(34, 197, 94, 0.5)' : '1.5px solid rgba(239, 68, 68, 0.5)',
+                        color: currentQ.status === 'active' ? '#4ade80' : '#f87171',
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                        letterSpacing: '0.5px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '5px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        {currentQ.status === 'active' ? '🟢 LIVE' : '🔒 CLOSED'}
+                      </span>
+                    )}
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', margin: '3px 0 0 0' }}>
                     {currentQ
                       ? 'Voters are currently viewing this prompt on their devices'
                       : 'Compose and broadcast question to all voters'}
                   </p>
                 </div>
 
-                {currentQ && (
-                  <span style={{
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    background: currentQ.status === 'active' ? 'rgba(34, 197, 94, 0.2)' : 'rgba(239, 68, 68, 0.2)',
-                    border: currentQ.status === 'active' ? '1.5px solid rgba(34, 197, 94, 0.5)' : '1.5px solid rgba(239, 68, 68, 0.5)',
-                    color: currentQ.status === 'active' ? '#4ade80' : '#f87171',
-                    fontSize: '0.76rem',
-                    fontWeight: 800,
-                    letterSpacing: '0.5px',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '5px',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    marginLeft: 'auto'
-                  }}>
-                    {currentQ.status === 'active' ? '🟢 LIVE' : '🔒 CLOSED'}
-                  </span>
-                )}
-              </div>
-
-              {/* Segmented Mode Selector Tabs */}
-              <div style={{ marginBottom: '16px' }}>
-                <div className="host-mode-toggle-bar" style={{ margin: 0, width: '100%' }}>
+                {/* Segmented Mode Selector Tabs right beside title */}
+                <div className="host-mode-toggle-bar" style={{ margin: 0 }}>
                   <button
                     type="button"
                     className={`host-mode-toggle-btn mode-vote ${activeMode === 'assembly' ? 'active' : ''}`}
@@ -339,16 +217,9 @@ export default function HostView({
               </div>
             ) : (
               <>
-                {/* Active Question Banner (if one is active) */}
-                <div className="active-question-banner" style={{
-                  padding: '16px 20px',
-                  background: 'linear-gradient(135deg, rgba(8, 47, 73, 0.85) 0%, rgba(4, 26, 42, 0.9) 100%)',
-                  border: '1.5px solid rgba(45, 212, 191, 0.4)',
-                  borderRadius: '14px',
-                  boxShadow: 'var(--clay-inset-track)',
-                  marginBottom: '18px'
-                }}>
-                  <div className="active-q-header">
+                {/* Combined Active Question Header & Live Distribution in a Single Card */}
+                <div id="hostLiveResultsCard" className="glass-card tally-card">
+                  <div className="active-q-header" style={{ marginBottom: '16px', paddingBottom: '14px', borderBottom: '1px solid rgba(45, 212, 191, 0.2)' }}>
                     <div className="active-q-info">
                       <span className="active-q-tag">
                         {`🗳️ Question #${currentQ.id} (${currentQ.mode === 'assembly' ? 'VOTE' : currentQ.mode === 'rating' ? 'RATING (1-10)' : currentQ.mode.toUpperCase()})`}
@@ -372,122 +243,270 @@ export default function HostView({
                       <button
                         type="button"
                         className="btn-round-action btn-reset-round"
-                        onClick={onResetVotes}
+                        onClick={() => {
+                          setConfirmDialog({
+                            title: 'Reset Question Votes?',
+                            message: `Are you sure you want to reset all participant votes to zero for Question #${currentQ.id}?`,
+                            icon: '🔄',
+                            confirmLabel: 'OK, Reset',
+                            confirmType: 'primary',
+                            onConfirm: () => {
+                              onResetVotes();
+                              setConfirmDialog(null);
+                            }
+                          });
+                        }}
                         title="Reset votes for this question"
                       >
                         <span>🔄 Reset Votes</span>
                       </button>
                     </div>
                   </div>
-                </div>
 
-                {/* Live Assembly Tally or Rating Tally */}
-                {activeMode === 'assembly' ? (
-                  <div id="hostAssemblyTally" className="tally-card glass-card">
-                    <h3>Live Vote Distribution (Question #{currentQ.id})</h3>
+                  {/* Live Assembly Tally or Rating Tally Content */}
+                  {activeMode === 'assembly' ? (
+                    <div id="hostAssemblyTally" className="tally-section">
+                      <h3 style={{ fontSize: '1.05rem', margin: '0 0 12px 0' }}>Live Vote Distribution</h3>
 
-                    <div className="tally-bars-list">
-                      {/* Yes Bar */}
-                      <div className="tally-row">
-                        <div className="tally-info">
-                          <span className="tally-label label-yes">👍 YES</span>
-                          <span className="tally-count" id="countYes">
-                            {tally.counts?.Yes || 0} votes ({tally.percentages?.Yes || 0}%)
-                          </span>
-                        </div>
-                        <div className="progress-bar-bg">
-                          <div
-                            className="progress-bar-fill fill-yes"
-                            style={{ width: `${tally.percentages?.Yes || 0}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* No Bar */}
-                      <div className="tally-row">
-                        <div className="tally-info">
-                          <span className="tally-label label-no">👎 NO</span>
-                          <span className="tally-count" id="countNo">
-                            {tally.counts?.No || 0} votes ({tally.percentages?.No || 0}%)
-                          </span>
-                        </div>
-                        <div className="progress-bar-bg">
-                          <div
-                            className="progress-bar-fill fill-no"
-                            style={{ width: `${tally.percentages?.No || 0}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Maybe Bar */}
-                      <div className="tally-row">
-                        <div className="tally-info">
-                          <span className="tally-label label-maybe">🤔 MAYBE</span>
-                          <span className="tally-count" id="countMaybe">
-                            {tally.counts?.Maybe || 0} votes ({tally.percentages?.Maybe || 0}%)
-                          </span>
-                        </div>
-                        <div className="progress-bar-bg">
-                          <div
-                            className="progress-bar-fill fill-maybe"
-                            style={{ width: `${tally.percentages?.Maybe || 0}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* NOTA Bar */}
-                      <div className="tally-row">
-                        <div className="tally-info">
-                          <span className="tally-label label-nota">🚫 NOTA</span>
-                          <span className="tally-count" id="countNota">
-                            {tally.counts?.NOTA || 0} votes ({tally.percentages?.NOTA || 0}%)
-                          </span>
-                        </div>
-                        <div className="progress-bar-bg">
-                          <div
-                            className="progress-bar-fill fill-nota"
-                            style={{ width: `${tally.percentages?.NOTA || 0}%` }}
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  /* Live Rating Scale Tally */
-                  <div id="hostRatingTally" className="tally-card glass-card">
-                    <div className="tally-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-                      <h3>Live 1–10 Rating Distribution (Question #{currentQ.id})</h3>
-                      <div className="rating-avg-card" style={{ textAlign: 'right' }}>
-                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Average Score: </span>
-                        <strong className="avg-score-huge" id="hostRatingAvgDisplay">{tally.average || '0.0'}</strong>
-                        <small style={{ color: 'var(--text-muted)' }}> / 10</small>
-                      </div>
-                    </div>
-
-                    <div className="rating-histogram-grid" id="ratingHistogramGrid">
-                      {Array.from({ length: 10 }, (_, i) => i + 1).map((score) => {
-                        const count = tally.distribution ? (tally.distribution[String(score)] || 0) : 0;
-                        const maxVal = Math.max(1, ...Object.values(tally.distribution || {}));
-                        const heightPct = (count / maxVal) * 100;
-
-                        return (
-                          <div key={score} className="histogram-col">
-                            <span className="hist-count">{count}</span>
-                            <div className="hist-bar-track">
-                              <div
-                                className="hist-bar-fill"
-                                style={{ height: `${heightPct}%`, minHeight: count > 0 ? 4 : 0 }}
-                              />
-                            </div>
-                            <span className="hist-label">{score}</span>
+                      <div className="tally-bars-list" style={{ marginTop: '10px' }}>
+                        {/* Yes Bar */}
+                        <div className="tally-row">
+                          <div className="tally-info">
+                            <span className="tally-label label-yes">👍 YES</span>
+                            <span className="tally-count" id="countYes">
+                              {tally.counts?.Yes || 0} votes ({tally.percentages?.Yes || 0}%)
+                            </span>
                           </div>
-                        );
-                      })}
+                          <div className="progress-bar-bg">
+                            <div
+                              className="progress-bar-fill fill-yes"
+                              style={{ width: `${tally.percentages?.Yes || 0}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* No Bar */}
+                        <div className="tally-row">
+                          <div className="tally-info">
+                            <span className="tally-label label-no">👎 NO</span>
+                            <span className="tally-count" id="countNo">
+                              {tally.counts?.No || 0} votes ({tally.percentages?.No || 0}%)
+                            </span>
+                          </div>
+                          <div className="progress-bar-bg">
+                            <div
+                              className="progress-bar-fill fill-no"
+                              style={{ width: `${tally.percentages?.No || 0}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Maybe Bar */}
+                        <div className="tally-row">
+                          <div className="tally-info">
+                            <span className="tally-label label-maybe">🤔 MAYBE</span>
+                            <span className="tally-count" id="countMaybe">
+                              {tally.counts?.Maybe || 0} votes ({tally.percentages?.Maybe || 0}%)
+                            </span>
+                          </div>
+                          <div className="progress-bar-bg">
+                            <div
+                              className="progress-bar-fill fill-maybe"
+                              style={{ width: `${tally.percentages?.Maybe || 0}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* NOTA Bar */}
+                        <div className="tally-row">
+                          <div className="tally-info">
+                            <span className="tally-label label-nota">🚫 NOTA</span>
+                            <span className="tally-count" id="countNota">
+                              {tally.counts?.NOTA || 0} votes ({tally.percentages?.NOTA || 0}%)
+                            </span>
+                          </div>
+                          <div className="progress-bar-bg">
+                            <div
+                              className="progress-bar-fill fill-nota"
+                              style={{ width: `${tally.percentages?.NOTA || 0}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    /* Live Rating Scale Tally Content */
+                    <div id="hostRatingTally" className="tally-section">
+                      <div className="tally-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
+                        <h3 style={{ fontSize: '1.05rem', margin: 0 }}>Live 1–10 Rating Distribution</h3>
+                        <div className="rating-avg-card" style={{ textAlign: 'right' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Average Score: </span>
+                          <strong className="avg-score-huge" id="hostRatingAvgDisplay">{tally.average || '0.0'}</strong>
+                          <small style={{ color: 'var(--text-muted)' }}> / 10</small>
+                        </div>
+                      </div>
+
+                      <div className="rating-histogram-grid" id="ratingHistogramGrid" style={{ marginTop: '12px' }}>
+                        {Array.from({ length: 10 }, (_, i) => i + 1).map((score) => {
+                          const count = tally.distribution ? (tally.distribution[String(score)] || 0) : 0;
+                          const maxVal = Math.max(1, ...Object.values(tally.distribution || {}));
+                          const heightPct = (count / maxVal) * 100;
+
+                          return (
+                            <div key={score} className="histogram-col">
+                              <span className="hist-count">{count}</span>
+                              <div className="hist-bar-track">
+                                <div
+                                  className="hist-bar-fill"
+                                  style={{ height: `${heightPct}%`, minHeight: count > 0 ? 4 : 0 }}
+                                />
+                              </div>
+                              <span className="hist-label">{score}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </>
             )}
+          </div>
+
+          {/* Right Column: Host Control & Credentials Panel */}
+          <div className="host-topbar glass-card">
+            <div className="room-credentials-panel">
+              {/* 4-Digit Room Code */}
+              <div className="credential-box">
+                <span className="cred-label">ROOM CODE</span>
+                <div className="cred-value" id="hostRoomCodeDisplay">#{room.id}</div>
+              </div>
+
+              {/* Dynamic Rotating Passcode */}
+              <div className={`credential-box totp-box ${isRoomLocked ? 'totp-box-locked' : ''}`}>
+                <span className="cred-label">{isRoomLocked ? 'ROOM LOCKED' : '20s PASSCODE'}</span>
+                <div className="totp-body">
+                  <div
+                    className={`cred-value pin-highlight ${isRoomLocked ? 'pin-highlight-locked' : ''}`}
+                    id="hostPasscodeDisplay"
+                    style={isRoomLocked ? { letterSpacing: '4px', opacity: 0.85 } : {}}
+                  >
+                    {isRoomLocked ? '- - - -' : (room.passcode || '----')}
+                  </div>
+                  {/* Circular Countdown Timer */}
+                  <div className="timer-ring-container">
+                    <svg className="timer-svg" width="42" height="42" viewBox="0 0 42 42">
+                      <circle
+                        className="timer-circle-bg"
+                        cx="21"
+                        cy="21"
+                        r="17"
+                        style={isRoomLocked ? { stroke: 'rgba(255, 255, 255, 0.08)' } : {}}
+                      />
+                      <circle
+                        className="timer-circle-progress"
+                        id="timerProgressCircle"
+                        cx="21"
+                        cy="21"
+                        r="17"
+                        style={{
+                          strokeDasharray: `${circumference} ${circumference}`,
+                          strokeDashoffset: progressOffset,
+                          transition: isRoomLocked ? 'none' : 'stroke-dashoffset 0.9s linear',
+                          stroke: isRoomLocked ? 'rgba(239, 68, 68, 0.4)' : undefined,
+                          opacity: isRoomLocked ? 0.25 : 1
+                        }}
+                      />
+                    </svg>
+                    <span
+                      className="timer-seconds"
+                      id="totpRemainingSec"
+                      style={isRoomLocked ? { color: '#f87171', fontSize: '1.2rem', fontWeight: 900 } : {}}
+                    >
+                      {isRoomLocked ? '-' : `${expiresIn}s`}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Host Actions */}
+            <div className="host-actions-grid">
+              {/* Row 2: lock room | Show QR | Voters (count) */}
+              <button
+                type="button"
+                className={`btn btn-sm host-action-btn ${room.isLocked ? 'btn-host-locked' : 'btn-host-lock'}`}
+                onClick={() => onToggleLock(!room.isLocked)}
+                title="Lock or Unlock Room"
+              >
+                <span className="host-btn-icon">{room.isLocked ? '🔒' : '🔓'}</span>
+                <span>{room.isLocked ? 'Room Locked' : 'Lock Room'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm host-action-btn btn-host-qr"
+                onClick={() => setIsQrModalOpen(true)}
+                title="Show QR Code and Direct Join Link"
+              >
+                <span className="host-btn-icon">📱</span>
+                <span>Show QR Code</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm host-action-btn btn-host-voters btn-voters-action"
+                onClick={() => setIsVoterModalOpen(true)}
+                title="View Connected Voters Roster"
+              >
+                <span className="host-btn-icon host-voters-icon">👥</span>
+                <span>Voters</span>
+                <span className="btn-badge-counter">{totalParticipants}</span>
+              </button>
+
+              {/* Row 3: Export CSV | History (count) | Erase Data */}
+              <button
+                type="button"
+                className="btn btn-sm host-action-btn btn-host-export"
+                onClick={handleExportCsv}
+                title="Export complete session history to CSV"
+              >
+                <span className="host-btn-icon">📥</span>
+                <span>Export CSV</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm host-action-btn btn-host-history"
+                onClick={() => setIsHistoryModalOpen(true)}
+                title="View Completed Rounds History"
+              >
+                <span className="host-btn-icon">📜</span>
+                <span>History ({questionHistory.length})</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-sm host-action-btn btn-host-erase"
+                onClick={() => {
+                  setConfirmDialog({
+                    title: 'Erase Session Data?',
+                    message: 'Are you sure you want to erase all temporary session data and question history? This action cannot be undone.',
+                    icon: '🗑️',
+                    confirmLabel: 'OK, Erase',
+                    confirmType: 'danger',
+                    onConfirm: () => {
+                      onEraseSessionData();
+                      setConfirmDialog(null);
+                    }
+                  });
+                }}
+                title="Erase all temporary session data"
+              >
+                <span className="host-btn-icon">🗑️</span>
+                <span>Erase Data</span>
+              </button>
+            </div>
           </div>
         </div>
       </main>
@@ -636,6 +655,48 @@ export default function HostView({
                 </div>
               ))
             )}
+          </div>
+        </div>
+      </div>
+
+      {/* Custom Confirmation Modal Dialog (Replaces native browser prompt) */}
+      <div className={`modal-backdrop ${confirmDialog ? 'open' : ''}`} id="confirmModalBackdrop">
+        <div className="modal-dialog glass-card" style={{ maxWidth: 420, textAlign: 'center', padding: '28px 24px' }}>
+          <button type="button" className="modal-close-btn" onClick={() => setConfirmDialog(null)}>
+            ✕
+          </button>
+
+          <div style={{ fontSize: '2.8rem', marginBottom: '12px' }}>
+            {confirmDialog?.icon || '⚠️'}
+          </div>
+
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff', margin: '0 0 8px 0' }}>
+            {confirmDialog?.title}
+          </h3>
+
+          <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.5, margin: '0 0 22px 0' }}>
+            {confirmDialog?.message}
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+            <button
+              type="button"
+              className="btn btn-outline"
+              onClick={() => setConfirmDialog(null)}
+              style={{ height: '42px', fontSize: '0.88rem' }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={`btn ${confirmDialog?.confirmType === 'danger' ? 'btn-danger' : 'btn-primary'}`}
+              onClick={() => {
+                if (confirmDialog?.onConfirm) confirmDialog.onConfirm();
+              }}
+              style={{ height: '42px', fontSize: '0.88rem' }}
+            >
+              {confirmDialog?.confirmLabel || 'OK'}
+            </button>
           </div>
         </div>
       </div>
