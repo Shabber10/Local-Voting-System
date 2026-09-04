@@ -212,8 +212,8 @@ def register_socket_events(socketio):
     @socketio.on("rejoin_room")
     def handle_rejoin_room(data):
         data = data or {}
-        room_id = data.get("roomId")
-        session_id = data.get("voterSessionId") or data.get("sessionId")
+        room_id = str(data.get("roomId", "")).strip()
+        session_id = str(data.get("voterSessionId") or data.get("sessionId") or "").strip()
         socket_id = request.sid
 
         room = room_service.get_room(room_id)
@@ -221,16 +221,37 @@ def register_socket_events(socketio):
             emit("room_joined", {"success": False, "error": "Room is no longer active."})
             return
 
-        if session_id and session_id in room.get("participants", {}):
-            try:
+        try:
+            # 1. Check if participant already exists in room
+            participant = room_service.get_participant(room_id, session_id)
+            if not participant and session_id in room.get("participants", {}):
+                participant = room["participants"][session_id]
+
+            if not participant:
+                # If room is locked, cannot auto-admit new session
+                if room.get("isLocked"):
+                    emit("room_joined", {"success": False, "error": "Room is locked by host."})
+                    return
+                # Auto-admit into active room with this session_id
                 participant = room_service.add_participant(room_id, socket_id, session_id=session_id)
-                join_room(f"room_{room_id}")
-                voter_state = room_service.get_voter_state(room_id, socket_id, session_id=session_id)
-                emit("room_joined", {"success": True, "state": voter_state})
-            except Exception as e:
-                emit("room_joined", {"success": False, "error": str(e)})
-        else:
-            emit("room_joined", {"success": False, "error": "Session not found or expired."})
+            else:
+                # Re-attach existing participant
+                participant = room_service.add_participant(room_id, socket_id, alias=participant.get("alias"), session_id=session_id)
+
+            join_room(f"room_{room_id}")
+            voter_state = room_service.get_voter_state(room_id, socket_id, session_id=session_id)
+            emit("room_joined", {"success": True, "state": voter_state})
+
+            # Broadcast participant roster & count update to host
+            host_state = room_service.get_host_state(room_id)
+            if host_state:
+                socketio.emit("roster_updated", {
+                    "participants": host_state["participants"],
+                    "participantCount": host_state["participantCount"]
+                }, to=f"room_{room_id}")
+
+        except Exception as e:
+            emit("room_joined", {"success": False, "error": str(e)})
 
     # Dynamic Question / Round Launching
     @socketio.on("host_launch_question")
